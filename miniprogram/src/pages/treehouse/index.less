@@ -1,0 +1,125 @@
+.th-root {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  background: #0E1520;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.th-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: brightness(0.45) saturate(1.10);
+}
+
+.th-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(10, 20, 46, 0.70) 0%, transparent 40%, rgba(6, 12, 28, 0.85) 100%);
+}
+
+.th-header {
+  position: relative;
+  z-index: 2;
+  padding-top: 120rpx;
+  padding-bottom: 20rpx;
+  display: flex;
+  justify-content: center;
+}
+
+.th-title {
+  font-size: 44rpx;
+  font-weight: 200;
+  letter-spacing: 9.68rpx;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 4rpx 48rpx rgba(60, 100, 200, 0.35);
+}
+
+.th-content {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28rpx;
+  padding: 0 64rpx;
+}
+
+.th-emoji {
+  font-size: 120rpx;
+  opacity: 0.85;
+  filter: drop-shadow(0 8rpx 32rpx rgba(80, 120, 160, 0.35));
+}
+
+.th-line1 {
+  font-size: 34rpx;
+  color: rgba(255, 255, 255, 0.84);
+  font-weight: 400;
+  letter-spacing: 3rpx;
+}
+
+.th-line2 {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.48);
+  letter-spacing: 1.8rpx;
+}
+
+.th-pill {
+  margin-top: 24rpx;
+  padding: 14rpx 40rpx;
+  border-radius: 40rpx;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1rpx solid rgba(255, 255, 255, 0.20);
+}
+
+.th-pill-text {
+  font-size: 25rpx;
+  color: rgba(255, 255, 255, 0.62);
+  letter-spacing: 2rpx;
+}
+
+.th-meanwhile {
+  margin-top: 56rpx;
+  font-size: 23rpx;
+  color: rgba(255, 255, 255, 0.40);
+  letter-spacing: 1.6rpx;
+}
+
+.th-actions {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 24rpx;
+}
+
+.th-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 28rpx 36rpx;
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(24rpx);
+  -webkit-backdrop-filter: blur(24rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.20);
+  box-shadow: 0 8rpx 40rpx rgba(40, 70, 140, 0.18);
+  transition: transform 150ms ease;
+}
+
+.th-action--hover { transform: scale(0.94); }
+
+.th-action-emoji { font-size: 56rpx; }
+
+.th-action-label {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.82);
+  letter-spacing: 1rpx;
+  font-weight: 500;
+}

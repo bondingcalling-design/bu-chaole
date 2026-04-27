@@ -1,0 +1,39 @@
+/* Global styles — mirrors Figma Make dark atmospheric theme */
+
+page {
+  background: #0E1520;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 28rpx;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+
+  /* Glass tokens — kept on page so descendants inherit via var() */
+  --glass-bg: rgba(255, 255, 255, 0.13);
+  --glass-bg-mid: rgba(255, 255, 255, 0.09);
+  --glass-bg-chip: rgba(255, 255, 255, 0.11);
+  --glass-border: rgba(255, 255, 255, 0.28);
+  --glass-border-mid: rgba(255, 255, 255, 0.18);
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-tertiary: rgba(255, 255, 255, 0.36);
+  --accent-blue: rgba(180, 220, 255, 0.95);
+  --bg-deep: #0E1520;
+}
+
+/* Reset on the actual mini-program element types — WXSS doesn't allow `*` selector */
+view,
+text,
+image,
+scroll-view,
+swiper,
+swiper-item,
+button,
+input,
+textarea,
+form,
+label,
+navigator,
+picker {
+  box-sizing: border-box;
+}

@@ -1,0 +1,438 @@
+/* ListenPage — ported from src/app/pages/ListenPage.tsx
+ * All lengths in rpx (1rpx = 1px at 375 design width).
+ */
+
+.listen-root {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0E1520;
+  overflow: hidden;
+}
+
+/* ── Background layers ──────────────────────────────────────────── */
+.listen-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: brightness(0.65) saturate(1.05) hue-rotate(5deg);
+}
+
+.listen-vignette-main {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(16, 28, 58, 0.60) 0%,
+    rgba(24, 40, 80, 0.08) 32%,
+    transparent 55%,
+    rgba(14, 22, 46, 0.20) 72%,
+    rgba(10, 16, 36, 0.75) 100%
+  );
+}
+
+.listen-vignette-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 320rpx;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(12, 18, 40, 0.68) 0%, transparent 100%);
+}
+
+.listen-vignette-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 480rpx;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(10, 16, 36, 0.78) 0%, transparent 100%);
+}
+
+.listen-glow-left {
+  position: absolute;
+  top: 12%;
+  left: 12%;
+  width: 600rpx;
+  height: 600rpx;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(160, 200, 255, 0.07) 0%, transparent 70%);
+}
+
+.listen-glow-right {
+  position: absolute;
+  bottom: 28%;
+  right: -5%;
+  width: 400rpx;
+  height: 400rpx;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(200, 220, 255, 0.05) 0%, transparent 70%);
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.listen-header {
+  position: relative;
+  z-index: 2;
+  height: 176rpx; /* 88px * 2 */
+  padding-top: 104rpx; /* 52px * 2 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.listen-title {
+  font-size: 44rpx;
+  font-weight: 200;
+  letter-spacing: 9.68rpx;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 4rpx 48rpx rgba(60, 100, 200, 0.35);
+}
+
+/* ── Body ───────────────────────────────────────────────────────── */
+.listen-body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 40rpx;
+  padding-bottom: 240rpx; /* space for floating tab bar */
+}
+
+/* Daily inspiration card */
+.insp-card {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx 32rpx;
+  border-radius: 32rpx;
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(32rpx);
+  -webkit-backdrop-filter: blur(32rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 12rpx 56rpx rgba(60, 90, 160, 0.14),
+    inset 0 2rpx 0 rgba(255, 255, 255, 0.22);
+}
+
+.insp-emoji {
+  font-size: 30rpx;
+  flex-shrink: 0;
+}
+
+.insp-text {
+  font-size: 25rpx;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.6;
+  font-weight: 300;
+  letter-spacing: 0.3rpx;
+}
+
+/* Center area */
+.listen-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.mic-field {
+  position: relative;
+  width: 520rpx;
+  height: 520rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mask shown while actively recording — blocks taps on tab bar / inspiration
+ * card / text-chat-pill so user can't accidentally trigger something else
+ * during a long-press. Mic-field is lifted above this via z-index below. */
+.listen-rec-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 150;
+  background: rgba(4, 8, 22, 0.42);
+  backdrop-filter: blur(8rpx);
+  -webkit-backdrop-filter: blur(8rpx);
+  pointer-events: auto;
+  animation: listen-mask-fade 220ms ease-out;
+}
+
+@keyframes listen-mask-fade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.listen-body.is-recording .listen-center {
+  position: relative;
+  z-index: 200;
+}
+
+.listen-body.is-recording .mic-caption {
+  position: relative;
+  z-index: 200;
+}
+
+/* ── Expanding rings ───────────────────────────────────────────── */
+.ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 272rpx;
+  height: 272rpx;
+  margin-left: -136rpx;
+  margin-top: -136rpx;
+  border-radius: 50%;
+  border: 2rpx solid rgba(200, 225, 255, 0.30);
+  pointer-events: none;
+  animation: ring-expand 3s ease-out infinite;
+  opacity: 0;
+}
+
+.ring.is-active {
+  border-color: rgba(180, 220, 255, 0.45);
+  animation-duration: 2s;
+}
+
+.ring-1 { animation-delay: 0s; }
+.ring-2 { animation-delay: 1s; }
+.ring-3 { animation-delay: 2s; }
+.ring.is-active.ring-1 { animation-delay: 0s; }
+.ring.is-active.ring-2 { animation-delay: 0.67s; }
+.ring.is-active.ring-3 { animation-delay: 1.33s; }
+
+@keyframes ring-expand {
+  0%   { transform: scale(1);    opacity: 0.6;  }
+  50%  { transform: scale(1.65); opacity: 0.28; }
+  100% { transform: scale(2.4);  opacity: 0;    }
+}
+
+/* ── Halo / inner glow ─────────────────────────────────────────── */
+.halo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 400rpx;
+  height: 400rpx;
+  margin-left: -200rpx;
+  margin-top: -200rpx;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(200, 225, 255, 0.08) 0%, transparent 65%);
+  transition: background 500ms ease;
+}
+
+.halo.is-active {
+  background: radial-gradient(circle, rgba(160, 210, 255, 0.16) 0%, transparent 65%);
+}
+
+.inner-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 312rpx;
+  height: 312rpx;
+  margin-left: -156rpx;
+  margin-top: -156rpx;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(220, 235, 255, 0.10) 0%, transparent 70%);
+  transition: background 400ms ease;
+}
+
+.inner-glow.is-active {
+  background: radial-gradient(circle, rgba(160, 215, 255, 0.18) 0%, transparent 70%);
+}
+
+/* ── Mic button ────────────────────────────────────────────────── */
+.mic-btn {
+  position: relative;
+  z-index: 1;
+  width: 272rpx;
+  height: 272rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(40rpx);
+  -webkit-backdrop-filter: blur(40rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.32);
+  box-shadow:
+    0 24rpx 96rpx rgba(0, 0, 0, 0.28),
+    0 0 48rpx rgba(200, 220, 255, 0.10),
+    inset 0 3rpx 0 rgba(255, 255, 255, 0.22);
+  transition: transform 200ms ease, background 400ms ease, box-shadow 400ms ease;
+}
+
+.mic-btn--hover {
+  transform: scale(0.93);
+}
+
+.mic-btn.is-active {
+  background: rgba(160, 215, 255, 0.22);
+  border-color: rgba(180, 225, 255, 0.50);
+  box-shadow:
+    0 0 80rpx rgba(140, 200, 255, 0.30),
+    0 24rpx 96rpx rgba(0, 0, 0, 0.25),
+    inset 0 3rpx 0 rgba(255, 255, 255, 0.30);
+  animation: mic-pulse 1.8s ease-in-out infinite;
+}
+
+.mic-btn.is-cancelling {
+  background: rgba(220, 70, 70, 0.32);
+  border-color: rgba(255, 100, 100, 0.55);
+  box-shadow:
+    0 0 80rpx rgba(220, 70, 70, 0.40),
+    0 24rpx 96rpx rgba(0, 0, 0, 0.25),
+    inset 0 3rpx 0 rgba(255, 200, 200, 0.30);
+  animation: none;
+  transform: scale(1.04);
+}
+
+@keyframes mic-pulse {
+  0%   { transform: scale(1);    }
+  50%  { transform: scale(1.04); }
+  100% { transform: scale(1);    }
+}
+
+.mic-btn-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.mic-icon {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.mic-off-icon {
+  width: 36rpx;
+  height: 36rpx;
+}
+
+/* Waveform */
+.waveform {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  height: 56rpx;
+}
+
+.wave-bar {
+  width: 6rpx;
+  border-radius: 6rpx;
+  background: rgba(255, 255, 255, 0.85);
+  transform-origin: center;
+  animation: wave-bounce 0.9s ease-in-out infinite alternate;
+}
+
+.wave-bar-0 { animation-duration: 0.70s; animation-delay: 0.00s; }
+.wave-bar-1 { animation-duration: 0.78s; animation-delay: 0.06s; }
+.wave-bar-2 { animation-duration: 0.86s; animation-delay: 0.12s; }
+.wave-bar-3 { animation-duration: 0.94s; animation-delay: 0.18s; }
+.wave-bar-4 { animation-duration: 1.02s; animation-delay: 0.24s; }
+.wave-bar-5 { animation-duration: 1.10s; animation-delay: 0.30s; }
+.wave-bar-6 { animation-duration: 1.18s; animation-delay: 0.36s; }
+.wave-bar-7 { animation-duration: 1.26s; animation-delay: 0.42s; }
+.wave-bar-8 { animation-duration: 1.34s; animation-delay: 0.48s; }
+
+@keyframes wave-bounce {
+  0%   { transform: scaleY(0.4); }
+  100% { transform: scaleY(1);   }
+}
+
+/* ── Mic caption / pill button ─────────────────────────────────── */
+.mic-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 56rpx;
+  gap: 12rpx;
+}
+
+.caption-recording {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.rec-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: rgba(255, 100, 100, 0.90);
+  animation: rec-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+
+.rec-text {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: rgba(180, 225, 255, 0.92);
+  letter-spacing: 1.2rpx;
+}
+
+.idle-text {
+  font-size: 30rpx;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.72);
+  letter-spacing: 1.2rpx;
+}
+
+.hint-text {
+  font-size: 23rpx;
+  color: rgba(255, 255, 255, 0.36);
+  letter-spacing: 1.4rpx;
+  font-weight: 300;
+}
+
+.text-chat-pill {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 32rpx;
+  padding: 16rpx 32rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.22);
+  transition: transform 150ms ease;
+}
+
+.text-chat-pill--hover {
+  transform: scale(0.94);
+}
+
+.msg-icon {
+  width: 26rpx;
+  height: 26rpx;
+}
+
+.msg-label {
+  font-size: 25rpx;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 1.2rpx;
+}

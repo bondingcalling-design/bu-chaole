@@ -1,0 +1,47 @@
+{
+  "name": "listen-miniprogram",
+  "version": "0.1.0",
+  "private": true,
+  "description": "倾听 · WeChat Mini Program (Taro 4 port of Figma Make design)",
+  "scripts": {
+    "build:weapp": "taro build --type weapp",
+    "build:weapp:watch": "taro build --type weapp --watch",
+    "dev:weapp": "npm run build:weapp:watch"
+  },
+  "browserslist": [
+    "last 3 versions",
+    "Android >= 4.1",
+    "iOS >= 8"
+  ],
+  "dependencies": {
+    "@babel/runtime": "^7.25.0",
+    "@tarojs/components": "4.1.6",
+    "@tarojs/helper": "4.1.6",
+    "@tarojs/plugin-framework-react": "4.1.6",
+    "@tarojs/plugin-platform-weapp": "4.1.6",
+    "@tarojs/react": "4.1.6",
+    "@tarojs/router": "4.1.6",
+    "@tarojs/runtime": "4.1.6",
+    "@tarojs/shared": "4.1.6",
+    "@tarojs/taro": "4.1.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@babel/preset-react": "^7.28.5",
+    "@tarojs/cli": "4.1.6",
+    "@tarojs/service": "4.1.6",
+    "@tarojs/taro-loader": "4.1.6",
+    "@tarojs/webpack5-runner": "4.1.6",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.1",
+    "@types/webpack-env": "^1.18.0",
+    "babel-preset-taro": "4.1.6",
+    "postcss": "^8.4.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

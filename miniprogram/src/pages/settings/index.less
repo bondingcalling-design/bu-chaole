@@ -1,0 +1,146 @@
+.settings-root {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  background: #0E1520;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: brightness(0.48) saturate(1.05);
+}
+
+.settings-frost {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(80rpx);
+  -webkit-backdrop-filter: blur(80rpx);
+  background: rgba(14, 24, 52, 0.60);
+}
+
+.settings-header {
+  position: relative;
+  z-index: 2;
+  padding-top: 96rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  padding-bottom: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-back {
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(18rpx);
+  -webkit-backdrop-filter: blur(18rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 150ms ease;
+}
+
+.settings-back--hover { transform: scale(0.86); }
+
+.settings-back-icon {
+  width: 38rpx;
+  height: 38rpx;
+}
+
+.settings-title {
+  font-size: 36rpx;
+  font-weight: 200;
+  letter-spacing: 8rpx;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.settings-spacer {
+  width: 68rpx;
+}
+
+.settings-body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  padding: 0 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 28rpx;
+}
+
+.settings-card {
+  border-radius: 32rpx;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 36rpx;
+  gap: 20rpx;
+}
+
+.settings-row.has-divider {
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-row-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-label {
+  font-size: 30rpx;
+  color: rgba(255, 255, 255, 0.86);
+  letter-spacing: 1.2rpx;
+}
+
+.settings-row-hint {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.42);
+  letter-spacing: 0.8rpx;
+}
+
+.danger-card {
+  padding: 32rpx 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(220, 80, 80, 0.14);
+  border: 1rpx solid rgba(220, 80, 80, 0.28);
+  transition: transform 150ms ease;
+}
+
+.settings-card--hover { transform: scale(0.98); }
+
+.danger-label {
+  font-size: 28rpx;
+  color: rgba(255, 130, 130, 0.92);
+  letter-spacing: 1.6rpx;
+}
+
+.settings-foot {
+  text-align: center;
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.32);
+  letter-spacing: 1.2rpx;
+  margin-top: 32rpx;
+}
