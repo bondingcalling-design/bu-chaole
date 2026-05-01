@@ -145,6 +145,7 @@
   align-items: center;
   justify-content: center;
   gap: 0;
+  transform: translateY(48rpx);
 }
 
 .mic-field {
@@ -156,9 +157,12 @@
   justify-content: center;
 }
 
-/* Mask shown while actively recording — blocks taps on tab bar / inspiration
- * card / text-chat-pill so user can't accidentally trigger something else
- * during a long-press. Mic-field is lifted above this via z-index below. */
+/* Visual-only dim/blur shown while recording. Must NOT capture touch events:
+ * Skyline routes touchend to whichever element is under the finger at release
+ * time (not the original touchstart target like web), so an interactive mask
+ * here would swallow the user's release-to-send and the recorder would only
+ * stop at the 60s ceiling. pointer-events:none lets touches fall through to
+ * the mic button underneath. */
 .listen-rec-mask {
   position: fixed;
   top: 0;
@@ -169,7 +173,7 @@
   background: rgba(4, 8, 22, 0.42);
   backdrop-filter: blur(8rpx);
   -webkit-backdrop-filter: blur(8rpx);
-  pointer-events: auto;
+  pointer-events: none;
   animation: listen-mask-fade 220ms ease-out;
 }
 
@@ -408,11 +412,11 @@
   font-weight: 300;
 }
 
-.text-chat-pill {
+.text-chat-pill,
+.translate-pill {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  margin-top: 32rpx;
   padding: 16rpx 32rpx;
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.10);
@@ -422,7 +426,16 @@
   transition: transform 150ms ease;
 }
 
-.text-chat-pill--hover {
+.text-chat-pill {
+  margin-top: 32rpx;
+}
+
+.translate-pill {
+  margin-top: 16rpx;
+}
+
+.text-chat-pill--hover,
+.translate-pill--hover {
   transform: scale(0.94);
 }
 
@@ -432,6 +445,13 @@
 }
 
 .msg-label {
+  font-size: 25rpx;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 1.2rpx;
+}
+
+.translate-pill-emoji { font-size: 25rpx; }
+.translate-pill-label {
   font-size: 25rpx;
   color: rgba(255, 255, 255, 0.65);
   letter-spacing: 1.2rpx;

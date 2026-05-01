@@ -1,0 +1,42 @@
+// Tightened from the original word-list. The earlier version triggered on
+// single-char "\u8349 / \u64cd / \u6709\u75c5 / \u5783\u573e / \u6df7\u86cb / \u5e9f\u7269 / \u8111\u6b8b" which lit up on
+// completely benign sentences ("\u4eca\u5929\u53bb\u770b\u8349\u5730", "\u5783\u573e\u5206\u7c7b\u597d\u70e6", "\u6211\u54e5\u8111\u6b8b\u53c8\u60f9\u6211\u5988"),
+// blocking normal venting from ever reaching the model. New rule of thumb:
+// every pattern must be EITHER a multi-char curse with no everyday meaning,
+// OR a curse word qualified by a target (e.g. \u4f60/\u4ed6/Ta) so context disambiguates.
+const HOSTILE_PATTERNS: RegExp[] = [
+  // Compound curses that have no benign reading
+  /(\u64cd\u4f60|\u8279\u4f60|\u8349\u4f60\u5988|\u8349\u6ce5\u9a6c|\u8349\u5c3c\u739b|\u5367\u69fd|\u5988\u7684|\u4ed6\u5988\u7684|\u5c3c\u739b|\u50bb\u903c|\u50bb\u5c44|sb\u4f60|SB\u4f60|\u715e\u7b14|\u8d31\u4eba|\u8d31\u8d27|\u738b\u516b\u86cb|\u72d7\u4e1c\u897f|\u9f9f\u5b59\u5b50|\u6eda\u4f60\u5988)/,
+  // Tell-someone-to-die / shut up \u2014 direct verbal attack
+  /(\u53bb\u6b7b|\u6eda\u86cb|\u6eda\u5f00|\u95ed\u5634|\u95ed\u4e0a\u4f60\u7684\u5634|\u6eda\u4e00\u8fb9)/,
+  // Kill / harm threats with explicit target within 8 chars
+  /(\u5f04\u6b7b|\u6253\u6b7b|\u6740\u4e86|\u6740\u6b7b|\u641e\u6b7b|\u6574\u6b7b|\u5e9f\u4e86|\u6bc1\u4e86|\u6345\u6b7b).{0,8}(\u4f60|\u4ed6|\u5979|ta|TA|Ta|\u5bf9\u65b9|\u90a3\u4e2a\u4eba|\u8fd9\u4eba|\u90a3\u5bb6\u4f19)/,
+  // Self-expressed wish to kill / hurt someone
+  /(\u6211\u60f3|\u6211\u8981|\u771f\u60f3|\u6068\u4e0d\u5f97).{0,8}(\u5f04\u6b7b|\u6253\u6b7b|\u6740\u4e86|\u6740\u6b7b|\u641e\u6b7b|\u6574\u6b7b|\u5e9f\u4e86|\u6bc1\u4e86|\u6345\u6b7b)/,
+];
+
+export function detectHostility(text: string): boolean {
+  if (!text) return false;
+  return HOSTILE_PATTERNS.some((re) => re.test(text));
+}
+
+export function sanitizeHostileForModel(text: string): string {
+  const trimmed = (text || '').trim();
+  const hasThreat = /(\u5f04\u6b7b|\u6253\u6b7b|\u6740\u4e86|\u6740\u6b7b|\u641e\u6b7b|\u6574\u6b7b|\u5e9f\u4e86|\u6bc1\u4e86|\u53bb\u6b7b)/.test(trimmed);
+
+  if (hasThreat) {
+    return '\u7528\u6237\u6b63\u5728\u975e\u5e38\u6124\u6012\uff0c\u539f\u8bdd\u60c5\u7eea\u5f3a\u70c8\uff0c\u5177\u4f53\u8bcd\u5df2\u672c\u5730\u9690\u85cf\u3002\u8bf7\u5148\u63a5\u4f4f\u60c5\u7eea\uff0c\u518d\u6e29\u548c\u5f15\u5bfc\u7528\u6237\u53bb\u6811\u6d1e\u53d1\u6cc4\uff0c\u6216\u628a\u771f\u5b9e\u8bc9\u6c42\u6362\u4e00\u79cd\u65b9\u5f0f\u8bf4\u51fa\u6765\u3002';
+  }
+  return '\u7528\u6237\u6b63\u5728\u5f3a\u70c8\u6124\u6012\u548c\u59d4\u5c48\uff0c\u539f\u8bdd\u60c5\u7eea\u5f3a\u70c8\uff0c\u5177\u4f53\u8bcd\u5df2\u672c\u5730\u9690\u85cf\u3002\u8bf7\u5148\u5171\u60c5\uff0c\u4e0d\u8bc4\u5224\uff0c\u8f7b\u8f7b\u5f15\u5bfc\u7528\u6237\u628a\u771f\u5b9e\u8bc9\u6c42\u8bf4\u51fa\u6765\u3002';
+}
+
+export async function showHostilityModal(): Promise<'treehouse' | 'continue'> {
+  const r = await Taro.showModal({
+    title: '\u611f\u89c9\u4f60\u706b\u6c14\u5f88\u5927',
+    content: '\u8fd9\u79cd\u7a0b\u5ea6\u7684\u60c5\u7eea\uff0c\u300c\u6811\u6d1e\u300d\u66f4\u9002\u5408\u4f60\u53d1\u6cc4\u4e00\u4e0b\u3002\u90a3\u91cc\u4f1a\u987a\u7740\u4f60\u8bf4\uff0c\u4e0d\u8bc4\u5224\u3001\u4e0d\u8bf4\u6559\uff0c\u5410\u5b8c\u5373\u711a\uff0c\u4e0d\u7559\u75d5\u8ff9\u3002\u8981\u53bb\u5417\uff1f',
+    confirmText: '\u53bb\u6811\u6d1e\u53d1\u6cc4',
+    cancelText: '\u7ee7\u7eed\u804a',
+    confirmColor: '#7ab8ff',
+  });
+  return r.confirm ? 'treehouse' : 'continue';
+}

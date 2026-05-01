@@ -14,6 +14,7 @@ export default defineAppConfig({
     'pages/breathe/index',
     'pages/checkin/index',
     'pages/vip/index',
+    'pages/translate/index',
   ],
   window: {
     backgroundTextStyle: 'light',

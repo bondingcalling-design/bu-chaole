@@ -44,9 +44,27 @@ const RADAR_DATA = [
 ];
 
 const DEPTH_INSIGHTS = [
-  { icon: '🧠', label: '回避型依恋',  desc: 'Ta 用沉默保护自己的心理边界',     color: 'rgba(200,175,255,0.95)' },
-  { icon: '🛡️', label: '防御性沟通',  desc: '转移话题是 Ta 处理压力的方式',     color: 'rgba(160,210,255,0.95)' },
-  { icon: '❤️', label: '渴望被理解',  desc: '内心深处极度需要你的接纳',         color: 'rgba(255,180,200,0.95)' },
+  {
+    icon: '🧠',
+    label: '回避型依恋',
+    desc: 'Ta 用沉默保护自己的心理边界',
+    detail: '回避型依恋者从小习惯独自处理情绪，把"暴露脆弱"等同于风险。当冲突升级，Ta 会本能退回到自己的"安全屋"——这不是在惩罚你，而是在自救。靠近的方式是：先给空间，再轻声靠近。',
+    color: 'rgba(200,175,255,0.95)',
+  },
+  {
+    icon: '🛡️',
+    label: '防御性沟通',
+    desc: '转移话题是 Ta 处理压力的方式',
+    detail: '当对话触及让 Ta 不舒服的核心，Ta 会用"换话题 / 反问 / 沉默"挡回来。这不是不爱听，而是大脑在用最省力的方式降温。可以尝试：先共情情绪，再回到议题，把"对错"变成"感受"。',
+    color: 'rgba(160,210,255,0.95)',
+  },
+  {
+    icon: '❤️',
+    label: '渴望被理解',
+    desc: '内心深处极度需要你的接纳',
+    detail: '哪怕表面上看起来 Ta 不在乎，内心深处仍然渴望被你看见。一个"我懂你"比十句道理都管用。下次冲突时，先把"我理解你刚才那一刻很难受"说出口，再讲剩下的话。',
+    color: 'rgba(255,180,200,0.95)',
+  },
 ];
 
 const HEARTBEAT_CANVAS_ID = 'rv-heartbeat';
@@ -64,6 +82,7 @@ function parseRgb(s: string) {
 export default function ReviewPage() {
   const [latest, setLatest] = useState<ReportRecord | null>(null);
   const [historyCount, setHistoryCount] = useState(0);
+  const [depthExpanded, setDepthExpanded] = useState<Set<number>>(new Set());
 
   useDidShow(() => {
     try {
@@ -74,12 +93,30 @@ export default function ReviewPage() {
     } catch (_) {
       setLatest(null);
     }
+    // Re-draw on every show. Skyline + ScrollView occasionally has the canvas
+    // node not yet sized when useReady fires (cards below the fold), and the
+    // page is also re-entered via tab-switch — useReady only fires once but
+    // the canvas may need redrawing if it lost its pixels. Defer slightly to
+    // let layout settle.
+    setTimeout(() => {
+      drawHeartbeat();
+      drawRadar();
+    }, 120);
   });
 
   useReady(() => {
     drawHeartbeat();
     drawRadar();
   });
+
+  const toggleDepth = (i: number) => {
+    setDepthExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
 
   const drawHeartbeat = () => {
     Taro.createSelectorQuery()
@@ -391,16 +428,30 @@ export default function ReviewPage() {
               </View>
 
               <View className="depth-list">
-                {DEPTH_INSIGHTS.map((it) => (
-                  <View key={it.label} className="depth-item">
-                    <Text className="depth-item-icon">{it.icon}</Text>
-                    <View className="depth-item-text">
-                      <Text className="depth-item-label" style={{ color: it.color }}>{it.label}</Text>
-                      <Text className="depth-item-desc">{it.desc}</Text>
+                {DEPTH_INSIGHTS.map((it, i) => {
+                  const open = depthExpanded.has(i);
+                  return (
+                    <View
+                      key={it.label}
+                      className={`depth-item ${open ? 'is-open' : ''}`}
+                      onClick={() => toggleDepth(i)}
+                    >
+                      <View className="depth-item-row">
+                        <Text className="depth-item-icon">{it.icon}</Text>
+                        <View className="depth-item-text">
+                          <Text className="depth-item-label" style={{ color: it.color }}>{it.label}</Text>
+                          <Text className="depth-item-desc">{it.desc}</Text>
+                        </View>
+                        <Text className={`depth-item-chev ${open ? 'is-open' : ''}`}>⌄</Text>
+                      </View>
+                      {open && (
+                        <View className="depth-item-detail">
+                          <Text className="depth-item-detail-text">{it.detail}</Text>
+                        </View>
+                      )}
                     </View>
-                    <Text className="rv-chev">›</Text>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             </View>
           </View>

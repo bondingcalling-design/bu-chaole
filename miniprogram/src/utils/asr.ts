@@ -1,9 +1,8 @@
-// AsrManager — wraps wx.RecorderManager + uploads audio to cloud storage +
-// calls the `asr` cloud function for 火山引擎 一句话识别.
-//
-// If the cloud function fails (env vars missing, ASR service down, etc.) we
-// still return a usable result: tempFilePath + duration with empty text.
-// The caller can show the voice bubble without an auto-AI reply in that case.
+// AsrManager — wraps wx.RecorderManager. Recording stop fires onStop
+// IMMEDIATELY with the local file; transcription is a separate exported
+// function the caller invokes when it's ready (typically after navigating
+// to the chat page so the user sees the bubble before the network round
+// trip completes).
 
 import Taro from '@tarojs/taro';
 
@@ -15,7 +14,7 @@ interface AsrStartOpts {
 export interface AsrStopResult {
   tempFilePath: string;
   duration: number; // ms
-  result: string;   // ASR transcript ('' if failed)
+  result: string;   // empty — transcribe explicitly via transcribeFile()
 }
 
 export interface AsrManager {
@@ -27,7 +26,6 @@ export interface AsrManager {
   onError: (cb: (err: any) => void) => void;
 }
 
-// Always supported because we use the built-in recorder + cloud function.
 export function isAsrSupported(): boolean {
   return true;
 }
@@ -47,20 +45,11 @@ class AsrSession implements AsrManager {
       this.cancelled = false;
       this.cbStart?.();
     });
-    this.recorder.onStop(async (res: any) => {
+    this.recorder.onStop((res: any) => {
       const file = res?.tempFilePath || '';
       const duration = Math.max(1, Date.now() - this.startedAt);
-      if (!file) {
-        this.cbStop?.({ tempFilePath: '', duration, result: '' });
-        return;
-      }
-      // Skip ASR call if user already cancelled (caller should mark before stop)
-      if (this.cancelled) {
-        this.cbStop?.({ tempFilePath: file, duration, result: '' });
-        return;
-      }
-      const text = await transcribe(file);
-      this.cbStop?.({ tempFilePath: file, duration, result: text });
+      // Fire onStop synchronously — transcription is the caller's call
+      this.cbStop?.({ tempFilePath: file, duration, result: '' });
     });
     this.recorder.onError((err: any) => {
       this.cbError?.(err);
@@ -92,46 +81,55 @@ class AsrSession implements AsrManager {
   onError(cb: (err: any) => void) { this.cbError = cb; }
 }
 
-async function transcribe(localFilePath: string): Promise<string> {
-  console.log('[ASR] step 1: upload local file', localFilePath);
-  let fileID = '';
+/**
+ * Run ASR on a local recorded file. Resolves with the transcript ('' on
+ * failure). Toasts errors so the user knows something went wrong.
+ *
+ * Implementation: read local file as base64 → call `asr` cloud function →
+ * forwards to 火山引擎「一句话识别」sync HTTP API. No cloud storage hop, no
+ * polling. Target round-trip < 2s for clips up to ~30s.
+ */
+export async function transcribeFile(localFilePath: string): Promise<string> {
+  if (!localFilePath) return '';
+  const t0 = Date.now();
+  console.log('[ASR] read local file as base64', localFilePath);
+  let base64 = '';
   try {
-    const cloudPath = `asr/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp3`;
-    const up = await Taro.cloud.uploadFile({ cloudPath, filePath: localFilePath });
-    fileID = up.fileID;
-    console.log('[ASR] step 1 OK fileID =', fileID);
-    if (!fileID) {
-      Taro.showToast({ title: 'ASR 上传失败：无 fileID', icon: 'none', duration: 2400 });
-      return '';
-    }
+    const fs = Taro.getFileSystemManager();
+    base64 = fs.readFileSync(localFilePath, 'base64') as string;
+    console.log('[ASR] base64 size =', base64.length, 'chars (~', Math.round(base64.length * 0.75 / 1024), 'KB)');
   } catch (e: any) {
-    console.error('[ASR] step 1 FAILED uploadFile:', e?.errMsg || e?.message || e);
-    Taro.showToast({ title: 'ASR 上传失败：' + (e?.errMsg || e?.message || '未知'), icon: 'none', duration: 2400 });
+    console.error('[ASR] readFile FAILED:', e?.errMsg || e?.message || e);
+    Taro.showToast({ title: 'ASR 读文件失败', icon: 'none', duration: 2000 });
+    return '';
+  }
+  if (!base64) {
+    Taro.showToast({ title: 'ASR 读文件为空', icon: 'none', duration: 2000 });
     return '';
   }
 
-  console.log('[ASR] step 2: call cloud function asr');
+  console.log('[ASR] call cloud function asr (sync)');
   let r: any;
   try {
-    const res = await Taro.cloud.callFunction({ name: 'asr', data: { fileID } });
+    const res = await Taro.cloud.callFunction({
+      name: 'asr',
+      data: { audio: base64, format: 'mp3' },
+    });
     r = res.result;
-    console.log('[ASR] step 2 OK result =', r);
+    console.log('[ASR] cloud function returned in', Date.now() - t0, 'ms; result =', r);
   } catch (e: any) {
     const msg = e?.errMsg || e?.message || String(e);
-    console.error('[ASR] step 2 FAILED callFunction:', msg);
+    console.error('[ASR] callFunction FAILED:', msg);
     if (msg.includes('FunctionName') || msg.includes('not found')) {
       Taro.showToast({ title: 'asr 云函数未部署', icon: 'none', duration: 2400 });
     } else {
       Taro.showToast({ title: 'ASR 调用失败：' + msg, icon: 'none', duration: 2400 });
     }
-    Taro.cloud.deleteFile({ fileList: [fileID] }).catch(() => {});
     return '';
   }
 
-  Taro.cloud.deleteFile({ fileList: [fileID] }).catch(() => {});
-
   if (r?.ok && r.text) {
-    console.log('[ASR] success text =', r.text);
+    console.log('[ASR] success text =', r.text, 'total', Date.now() - t0, 'ms');
     return r.text as string;
   }
   console.warn('[ASR] cloud function returned ok=false', r);
@@ -145,7 +143,6 @@ async function transcribe(localFilePath: string): Promise<string> {
 
 let cached: AsrSession | null = null;
 export function getAsrManager(): AsrManager | null {
-  // Reuse session — it's just wrapping the singleton wx recorder
   if (!cached) cached = new AsrSession();
   return cached;
 }

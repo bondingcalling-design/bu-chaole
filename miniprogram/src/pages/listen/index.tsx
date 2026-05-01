@@ -8,6 +8,7 @@ import iconMicOff from '@/assets/icons/mic-off.svg';
 import iconMessageCircle from '@/assets/icons/message-circle.svg';
 import FloatingTabBar from '@/components/floating-tab-bar';
 import { getAsrManager, isAsrSupported, AsrStopResult } from '@/utils/asr';
+import { ensureRecordPermission } from '@/utils/recordPerm';
 
 import './index.less';
 
@@ -32,6 +33,10 @@ export default function ListenPage() {
   const cancellingRef = useRef(false);
   const recordingStartedRef = useRef(false);
   const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Tracks whether the finger is still on the mic. Survives across the
+  // permission-modal await — if the user releases while the system dialog is
+  // still up, we use this flag to abort instead of starting a runaway recording.
+  const isPressingRef = useRef(false);
 
   const getRecorder = () => {
     if (!recorderRef.current) recorderRef.current = Taro.getRecorderManager();
@@ -84,17 +89,22 @@ export default function ListenPage() {
   }, [isListening]);
 
   const goToChatWithVoice = (tempFilePath: string, durationSec: number, transcript: string) => {
+    // Always pass pendingAsr=true when transcript is empty — the chat page
+    // will run ASR in the background while the bubble is already on screen.
+    // This makes the perceived latency feel < 500ms instead of 5-15s.
     Taro.setStorageSync('pending-voice', {
       tempFilePath,
       duration: formatDuration(durationSec),
       durationSec,
       transcript,
+      pendingAsr: !transcript,
       ts: Date.now(),
     });
     Taro.navigateTo({ url: '/pages/chat/index?voiceMessage=1' });
   };
 
   const beginActualRecording = () => {
+    if (recordingStartedRef.current) return;
     recordingStartedRef.current = true;
     setIsListening(true);
 
@@ -175,28 +185,28 @@ export default function ListenPage() {
     });
   };
 
-  const handleMicTouchStart = async (e: any) => {
+  const handleMicTouchStart = (e: any) => {
     if (pressTimerRef.current || recordingStartedRef.current) return;
 
-    try {
-      const setting = await Taro.getSetting();
-      if (setting.authSetting['scope.record'] === false) {
-        const ok = await Taro.showModal({
-          title: '需要麦克风权限',
-          content: '请在「设置」里允许小程序使用麦克风',
-          confirmText: '去开启',
-        });
-        if (ok.confirm) Taro.openSetting();
-        return;
-      }
-    } catch (_) {}
-
+    // Synchronous setup so a quick tap (touchend before 300ms) can clear the
+    // timer and surface the "长按麦克风开始录音" toast. Auth check is deferred
+    // into the timer callback — if the user releases early we don't want to
+    // pop a permission modal at all.
     cancellingRef.current = false;
     setIsCancelling(false);
+    isPressingRef.current = true;
     startYRef.current = e?.touches?.[0]?.clientY ?? null;
 
-    pressTimerRef.current = setTimeout(() => {
+    pressTimerRef.current = setTimeout(async () => {
       pressTimerRef.current = null;
+      // First-time permission dialog must finish BEFORE recorder.start(),
+      // otherwise the recorder fires 'auth deny' before the user replies.
+      const granted = await ensureRecordPermission();
+      // User may have lifted the finger while the permission modal was up.
+      // Without this guard a runaway recording would start with no way to stop
+      // it short of the 60s ceiling.
+      if (!isPressingRef.current) return;
+      if (!granted) return;
       beginActualRecording();
     }, LONG_PRESS_MS);
   };
@@ -214,6 +224,7 @@ export default function ListenPage() {
 
   const handleMicTouchEnd = () => {
     startYRef.current = null;
+    isPressingRef.current = false;
     if (pressTimerRef.current) {
       clearTimeout(pressTimerRef.current);
       pressTimerRef.current = null;
@@ -233,6 +244,10 @@ export default function ListenPage() {
 
   const goToTextChat = () => {
     Taro.navigateTo({ url: '/pages/chat/index' });
+  };
+
+  const goToTranslate = () => {
+    Taro.navigateTo({ url: '/pages/translate/index' });
   };
 
   return (
@@ -317,6 +332,15 @@ export default function ListenPage() {
             <View className="text-chat-pill" onClick={goToTextChat} hoverClass="text-chat-pill--hover">
               <Image className="msg-icon" src={iconMessageCircle} mode="aspectFit" />
               <Text className="msg-label">文字倾诉</Text>
+            </View>
+
+            <View
+              className="translate-pill"
+              onClick={goToTranslate}
+              hoverClass="translate-pill--hover"
+            >
+              <Text className="translate-pill-emoji">💬</Text>
+              <Text className="translate-pill-label">高情商翻译</Text>
             </View>
           </View>
         </View>

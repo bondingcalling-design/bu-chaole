@@ -112,15 +112,13 @@
   letter-spacing: 1.2rpx;
 }
 
-.rp-history-link {
-  padding: 12rpx 24rpx;
-  border-radius: 40rpx;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1rpx solid rgba(255, 255, 255, 0.16);
-  transition: transform 150ms ease;
+/* spacer where the history button used to sit (it overlapped the WeChat
+ * capsule). Keep an invisible block of similar width so the title stays
+ * visually centered. */
+.rp-header-spacer {
+  width: 88rpx;
+  height: 1rpx;
 }
-.rp-history-link--hover { transform: scale(0.94); }
-.rp-history-text { font-size: 24rpx; color: rgba(255, 255, 255, 0.72); letter-spacing: 1rpx; }
 
 .rp-divider {
   height: 1rpx;
@@ -474,19 +472,83 @@
   margin-top: 16rpx;
   padding: 24rpx 28rpx;
   border-radius: 28rpx;
-  background: rgba(255, 130, 100, 0.08);
-  border: 1rpx solid rgba(255, 130, 100, 0.22);
   display: flex;
   align-items: flex-start;
   gap: 16rpx;
+}
+.radar-warn-high {
+  background: rgba(255, 130, 100, 0.08);
+  border: 1rpx solid rgba(255, 130, 100, 0.22);
+  .radar-warn-text { color: rgba(255, 175, 155, 0.90); }
+}
+.radar-warn-low {
+  background: rgba(255, 215, 100, 0.08);
+  border: 1rpx solid rgba(255, 215, 100, 0.24);
+  .radar-warn-text { color: rgba(255, 225, 165, 0.92); }
+}
+.radar-warn-good {
+  background: rgba(120, 235, 190, 0.08);
+  border: 1rpx solid rgba(120, 235, 190, 0.24);
+  .radar-warn-text { color: rgba(170, 240, 210, 0.92); }
 }
 .radar-warn-emoji { font-size: 28rpx; flex-shrink: 0; }
 .radar-warn-text {
   flex: 1;
   font-size: 24rpx;
-  color: rgba(255, 175, 155, 0.90);
   line-height: 1.7;
   letter-spacing: 0.4rpx;
+}
+
+/* ── User-input AI translate ─────────────────────────────────── */
+.ti-input-wrap {
+  position: relative;
+  margin-top: 18rpx;
+  padding: 24rpx 28rpx 36rpx;
+  border-radius: 28rpx;
+  background: rgba(200, 175, 255, 0.06);
+  border: 1rpx solid rgba(200, 175, 255, 0.18);
+}
+.ti-input {
+  width: 100%;
+  min-height: 168rpx;
+  font-size: 28rpx;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 300;
+  letter-spacing: 0.4rpx;
+}
+.ti-counter {
+  position: absolute;
+  right: 24rpx;
+  bottom: 14rpx;
+  font-size: 22rpx;
+  color: rgba(200, 175, 255, 0.55);
+  letter-spacing: 0.4rpx;
+}
+.ti-btn {
+  margin-top: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 26rpx;
+  border-radius: 28rpx;
+  background: linear-gradient(135deg, rgba(195, 170, 255, 0.92), rgba(160, 210, 255, 0.92));
+  box-shadow: 0 12rpx 40rpx rgba(120, 140, 200, 0.30);
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+.ti-btn--hover { transform: scale(0.97); }
+.ti-btn.is-disabled { opacity: 0.55; }
+.ti-btn-text {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: rgba(20, 30, 60, 0.95);
+  letter-spacing: 0.6rpx;
+}
+.ti-result {
+  margin-top: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
 }
 
 /* ── Insights ────────────────────────────────────────────────── */
@@ -610,10 +672,26 @@
   transition: transform 150ms ease;
 }
 .poster-btn--hover { transform: scale(0.97); }
+.poster-btn.is-busy { opacity: 0.55; }
 .poster-btn-emoji { font-size: 36rpx; }
 .poster-btn-text {
   font-size: 31rpx;
   font-weight: 700;
   color: rgba(220, 235, 255, 0.95);
   letter-spacing: 1.2rpx;
+}
+
+/* Off-screen canvas for poster export — never visually rendered, but the
+ * miniprogram requires the Canvas to be in the tree to draw onto it. */
+.poster-canvas-wrap {
+  position: absolute;
+  top: -9999rpx;
+  left: -9999rpx;
+  width: 600rpx;
+  height: 880rpx;
+  pointer-events: none;
+}
+.poster-canvas {
+  width: 600rpx;
+  height: 880rpx;
 }

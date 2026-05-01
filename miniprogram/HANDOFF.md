@@ -130,25 +130,14 @@ npm run dev:weapp             # watch 模式
 
 | # | 任务 | PRD 出处 | 实现要点 |
 |---|---|---|---|
-| P0-5 | **打字机流式输出（Stream）** | §3.1 强调"缓解等待焦虑" | doubao 云函数支持 `stream: true`；前端用 `Taro.cloud.callContainer` 或 SSE 接收。**或**：保留非流式但前端做模拟打字效果（更省工） |
-| P0-6 | **共情先于讲理（强制）** | §3.1 | 重写 doubao chat prompt：「**必须**先安抚情绪（如"我理解，换我也会难受"）再追问。禁止一上来讲道理 / 客套话」 |
-| P0-7 | **三阶翻译器命名调整 + 60 字硬上限** | §3.1 | 当前是「温柔 / 理性 / 直白」→ 改为 PRD 的「温柔 / 客观 / 直白」。Prompt 强调 60 字内 + 流式输出 |
+
+
 | P0-8 | **【一键复制并发送给 Ta】卡片分享** | §3.1 / §2.2 步骤 6 | report 页翻译结果 → 生成卡片 → `Taro.showShareImageMenu` 或转发 API。**核心目标**：MVP 单机靠卡片完成"双边闭环"，撬动对方关注 |
 | P0-9 | **草稿本地强绑定（onInput → Storage）** | §4.1 杀后台防丢 | chat textarea 每次 `onInput` 写 `Taro.setStorageSync('chat-draft', val)`；进入 chat 页时从 storage 恢复 |
 | P0-10 | **意图分流：极端攻击时弹窗引导树洞** | §3.3 | 检测用户消息中负面强度（关键词 + 大模型评分），命中 → 弹「感觉你火气很大，去【树洞】发泄一下吗？」 |
 | P0-11 | **树洞嘴替模式 + 阅后即焚** | §3.3 | 新建 `pages/treehouse-chat/`：纯顺着用户共情、禁止说教；退出时 `Taro.removeStorageSync('treehouse-conv')`；云端**不落库**（树洞专用 prompt + 不保存到 history） |
 
-### 🔴 P0 用户已报告的 bug（debug list）
 
-| # | 问题 | 复现 | 修复方向 |
-|---|---|---|---|
-| B-1 | **两个语音页点一下没提示引导长按** | 首页 / 聊天页麦克风，短按 < 300ms 不弹 toast | listen + chat 的 `handleMicTouchEnd`，pressTimer 路径检查 `Taro.showToast({title: '长按麦克风开始录音'})` 是否触发；可能 toast 被遮罩盖住，要 z-index 更高 |
-| B-2 | **文字聊天输入框有文本时往下跳** | chat 页输入第一个字，输入框 jump down 被键盘挡 | Skyline + Textarea 兼容坑。当前 `chat-bottom: position: fixed` + Textarea `fixed` 已设但仍异常。真机测具体偏移；或改用 `cover-view` + `cover-input` 替代 textarea |
-| B-3 | **高情商翻译缺"翻译用户输入的话"** | report 页只有静态 3 tab，缺让用户输入 + AI 翻译的 textarea | 已并入 P0-7：在 report 页 `TranslationCard` 加 textarea + 完善话术按钮 + `mode: 'translate'` 云函数 |
-| B-4 | **历史按钮被微信胶囊按钮挡住** | report 页右上角"历史"按钮被胶囊重叠 | 直接删 history 入口，用户从浮动 tab 进复盘 → 历史 |
-| B-5 | **复盘 tab 4 卡片缺动画和展开** | review tab 4 张图卡静态、深度心理 chip 不可展开 | 给卡片加 `animation: card-fade-in 320ms`；深度心理 chip 加 expanded state（参考 report 页 insight cards） |
-| B-6 | **report 页雷达 / 翻译 / 洞察 / 误解仍是 mock** | 进 report 看到 "我今天感觉有点落寞..." | 看 doubao 云函数 `report` 模式日志，AI 是否真返回 JSON。在 `loading/index.tsx` 加 `console.log('parsed report', report)` 验证。如果一直 fallback 到 mock，说明 JSON 解析失败 |
-| B-7 | **ASR 太慢（5-15s），换一句话识别** | 现在用 录音文件识别 async 模式 | 改 `cloudfunctions/asr/index.js`：换 endpoint 到 `https://openspeech.bytedance.com/api/v1/asr`（一句话同步版）；可能需改鉴权头（`X-Api-App-Key`）+ 直接 base64 上传不走云存储；目标 < 2 秒返回 |
 
 ### 🟡 P1 复盘强化（PRD §3.2 写明但简化版未做）
 

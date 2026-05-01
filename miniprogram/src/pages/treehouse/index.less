@@ -13,113 +13,254 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  filter: brightness(0.45) saturate(1.10);
+  filter: brightness(0.42) saturate(0.95) hue-rotate(-8deg);
 }
-
-.th-vignette {
+.th-vignette-main {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(10, 20, 46, 0.70) 0%, transparent 40%, rgba(6, 12, 28, 0.85) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(20, 32, 22, 0.66) 0%,
+    rgba(14, 24, 18, 0.20) 30%,
+    transparent 55%,
+    rgba(10, 18, 14, 0.78) 100%
+  );
+}
+.th-vignette-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 360rpx;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(8, 16, 12, 0.78) 0%, transparent 100%);
+}
+.th-vignette-bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 480rpx;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(6, 14, 10, 0.86) 0%, transparent 100%);
 }
 
-.th-header {
+/* ── Header ──────────────────────────────────────────────── */
+.th-nav {
   position: relative;
   z-index: 2;
-  padding-top: 120rpx;
-  padding-bottom: 20rpx;
+  padding: 96rpx 24rpx 12rpx;
   display: flex;
+  align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+.th-nav-title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+.th-nav-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: rgba(220, 240, 220, 0.92);
+  letter-spacing: 1.2rpx;
+}
+.th-nav-sub {
+  font-size: 21rpx;
+  color: rgba(180, 220, 190, 0.55);
+  letter-spacing: 0.6rpx;
 }
 
-.th-title {
-  font-size: 44rpx;
-  font-weight: 200;
-  letter-spacing: 9.68rpx;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 4rpx 48rpx rgba(60, 100, 200, 0.35);
-}
-
-.th-content {
+/* ── List ────────────────────────────────────────────────── */
+.th-scroll {
   position: relative;
   z-index: 2;
   flex: 1;
+  min-height: 0;
+}
+.th-list {
+  padding: 24rpx 32rpx 40rpx;
   display: flex;
   flex-direction: column;
+  gap: 24rpx;
+}
+
+.msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16rpx;
+  width: 100%;
+}
+.msg-row-tree { justify-content: flex-start; }
+.msg-row-user { justify-content: flex-end; }
+
+.tree-avatar {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 50%;
+  background: rgba(140, 200, 150, 0.18);
+  border: 1rpx solid rgba(140, 200, 150, 0.32);
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 28rpx;
-  padding: 0 64rpx;
+  flex-shrink: 0;
 }
+.tree-avatar-emoji { font-size: 30rpx; }
 
-.th-emoji {
-  font-size: 120rpx;
-  opacity: 0.85;
-  filter: drop-shadow(0 8rpx 32rpx rgba(80, 120, 160, 0.35));
+.bubble {
+  max-width: 78%;
+  padding: 22rpx 28rpx;
+  border-radius: 28rpx;
+  backdrop-filter: blur(16rpx);
+  -webkit-backdrop-filter: blur(16rpx);
 }
-
-.th-line1 {
-  font-size: 34rpx;
-  color: rgba(255, 255, 255, 0.84);
+.bubble-tree {
+  background: rgba(140, 200, 150, 0.12);
+  border: 1rpx solid rgba(140, 200, 150, 0.22);
+  border-bottom-left-radius: 8rpx;
+}
+.bubble-user {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1rpx solid rgba(255, 255, 255, 0.26);
+  border-bottom-right-radius: 8rpx;
+}
+.bubble-text {
+  font-size: 28rpx;
+  line-height: 1.65;
+  letter-spacing: 0.4rpx;
+}
+.bubble-text-tree {
+  color: rgba(225, 245, 230, 0.92);
+  font-weight: 300;
+}
+.bubble-text-user {
+  color: rgba(255, 255, 255, 0.95);
   font-weight: 400;
-  letter-spacing: 3rpx;
 }
 
-.th-line2 {
-  font-size: 26rpx;
-  color: rgba(255, 255, 255, 0.48);
-  letter-spacing: 1.8rpx;
+.th-caret {
+  display: inline-block;
+  margin-left: 2rpx;
+  color: rgba(170, 235, 180, 0.85);
+  animation: th-caret-blink 800ms steps(2, jump-none) infinite;
+}
+@keyframes th-caret-blink {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 
-.th-pill {
-  margin-top: 24rpx;
-  padding: 14rpx 40rpx;
-  border-radius: 40rpx;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1rpx solid rgba(255, 255, 255, 0.20);
-}
-
-.th-pill-text {
-  font-size: 25rpx;
-  color: rgba(255, 255, 255, 0.62);
-  letter-spacing: 2rpx;
-}
-
-.th-meanwhile {
-  margin-top: 56rpx;
-  font-size: 23rpx;
-  color: rgba(255, 255, 255, 0.40);
-  letter-spacing: 1.6rpx;
-}
-
-.th-actions {
+.typing-bubble {
   display: flex;
-  gap: 24rpx;
-  margin-top: 24rpx;
+  align-items: center;
+  gap: 10rpx;
+  padding: 22rpx 28rpx;
+}
+.typing-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: rgba(170, 235, 180, 0.65);
+  animation: th-typing-bounce 0.96s ease-in-out infinite;
+}
+.typing-dot-0 { animation-delay: 0s; }
+.typing-dot-1 { animation-delay: 0.16s; }
+.typing-dot-2 { animation-delay: 0.32s; }
+@keyframes th-typing-bounce {
+  0%, 100% { transform: translateY(0);    opacity: 0.4; }
+  50%      { transform: translateY(-4rpx); opacity: 1; }
 }
 
-.th-action {
+.th-bottom-sentinel {
+  width: 100%;
+  height: 1rpx;
+}
+
+/* ── Bottom input ─────────────────────────────────────────
+ * FloatingTabBar takes ~160rpx of viewport bottom (92rpx pill +
+ * 60rpx safe-area padding + 8rpx top breathing). Anchor th-bottom at 152rpx
+ * so its dark gradient meets the top of the tab-bar pill with no visible
+ * gap, then let internal padding lift the input row clear of it. */
+.th-bottom {
+  position: fixed;
+  bottom: 152rpx;
+  left: 0;
+  right: 0;
+  z-index: 50;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12rpx;
-  padding: 28rpx 36rpx;
-  border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.10);
-  backdrop-filter: blur(24rpx);
-  -webkit-backdrop-filter: blur(24rpx);
-  border: 1rpx solid rgba(255, 255, 255, 0.20);
-  box-shadow: 0 8rpx 40rpx rgba(40, 70, 140, 0.18);
-  transition: transform 150ms ease;
+  gap: 14rpx;
+  padding: 32rpx 32rpx 24rpx;
+  background: linear-gradient(to top, rgba(6, 14, 10, 0.94) 70%, rgba(6, 14, 10, 0));
+  backdrop-filter: blur(8rpx);
+  -webkit-backdrop-filter: blur(8rpx);
 }
 
-.th-action--hover { transform: scale(0.94); }
+.th-shred-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 4rpx 16rpx;
+}
+.th-shred-emoji { font-size: 22rpx; }
+.th-shred-text {
+  font-size: 21rpx;
+  color: rgba(220, 180, 130, 0.72);
+  letter-spacing: 0.6rpx;
+}
 
-.th-action-emoji { font-size: 56rpx; }
+.th-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  min-height: 96rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 48rpx;
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(28rpx);
+  -webkit-backdrop-filter: blur(28rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 8rpx 40rpx rgba(20, 50, 30, 0.20),
+    inset 0 2rpx 0 rgba(255, 255, 255, 0.16);
+}
+.th-input {
+  flex: 1;
+  min-height: 44rpx;
+  max-height: 200rpx;
+  font-size: 28rpx;
+  font-weight: 300;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.2rpx;
+  padding: 10rpx 0;
+}
+.th-input-placeholder { color: rgba(255, 255, 255, 0.32); }
 
-.th-action-label {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.82);
-  letter-spacing: 1rpx;
-  font-weight: 500;
+.th-send-btn {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgba(140, 200, 150, 0.22);
+  border: 1rpx solid rgba(140, 200, 150, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 150ms ease, background 150ms ease;
+}
+.th-send-btn.is-active {
+  background: rgba(140, 200, 150, 0.92);
+  border-color: rgba(140, 200, 150, 0.95);
+  box-shadow: 0 6rpx 24rpx rgba(80, 160, 100, 0.32);
+}
+.th-send-btn--hover { transform: scale(0.92); }
+.th-send-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+/* Reserve space at the bottom of the scroll list so the last bubble
+ * isn't trapped under the input bar. */
+.th-list {
+  padding-bottom: 480rpx;
 }

@@ -1,5 +1,5 @@
 import { View, Text, Image, Textarea, ScrollView } from '@tarojs/components';
-import Taro, { useLoad, useRouter } from '@tarojs/taro';
+import Taro, { useLoad, useDidShow, useRouter } from '@tarojs/taro';
 import { useEffect, useRef, useState } from 'react';
 
 import bgImage from '@/assets/bg-dawn.jpg';
@@ -7,8 +7,10 @@ import iconBack from '@/assets/icons/chevron-left.svg';
 import iconSend from '@/assets/icons/send.svg';
 import iconMicSmall from '@/assets/icons/mic-small.svg';
 import iconFileText from '@/assets/icons/file-text.svg';
-import { getAsrManager, isAsrSupported, AsrStopResult } from '@/utils/asr';
+import { getAsrManager, isAsrSupported, AsrStopResult, transcribeFile } from '@/utils/asr';
 import { detectCrisis, showCrisisModal } from '@/utils/crisisDetect';
+import { detectHostility, sanitizeHostileForModel, showHostilityModal } from '@/utils/intentDetect';
+import { ensureRecordPermission } from '@/utils/recordPerm';
 
 import './index.less';
 
@@ -22,6 +24,7 @@ interface Message {
   text: string;
   voicePath?: string;
   duration?: string;
+  asrPending?: boolean; // voice bubble shown before ASR completes
 }
 
 const INITIAL_MESSAGES: Message[] = [
@@ -38,31 +41,73 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [bridgePulsing, setBridgePulsing] = useState(false);
   const [scrollAnchor, setScrollAnchor] = useState('');
+  // P0-5: typewriter / streaming illusion. The reply arrives whole from the
+  // cloud function but we reveal it character-by-character to soften the
+  // wait gap and make the AI feel "alive". Only one message types at a time.
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [typingProgress, setTypingProgress] = useState(0);
 
   const userMsgCount = messages.filter((m) => m.role === 'user').length;
   const progressPct = Math.min(92, 30 + userMsgCount * 15);
+
+  // P0-9: restore draft on entry. Draft is wiped after a successful send so
+  // it doesn't bleed into the next conversation. Also re-check on every
+  // useDidShow — useLoad alone is unreliable in Skyline when the page is
+  // preloaded by the framework before the first visible render.
+  const restoreDraft = () => {
+    try {
+      const draft = Taro.getStorageSync('chat-draft');
+      // Only restore if the user hasn't started typing yet — never clobber
+      // in-flight input on tab return.
+      if (typeof draft === 'string' && draft.length > 0) {
+        setInput((cur) => (cur ? cur : draft));
+      }
+    } catch (_) {}
+  };
+  useLoad(restoreDraft);
+  useDidShow(restoreDraft);
 
   useLoad(() => {
     if (router.params.voiceMessage === '1') {
       try {
         const v = Taro.getStorageSync('pending-voice') as
-          | { tempFilePath: string; duration: string; durationSec: number; transcript?: string; ts: number }
+          | { tempFilePath: string; duration: string; durationSec: number; transcript?: string; pendingAsr?: boolean; ts: number }
           | '';
         Taro.removeStorageSync('pending-voice');
         if (v && typeof v === 'object' && v.tempFilePath) {
           const transcript = (v.transcript || '').trim();
+          const voiceMsgId = `v-${v.ts}`;
           const voiceMsg: Message = {
-            id: `v-${v.ts}`,
+            id: voiceMsgId,
             role: 'user',
             kind: 'voice',
-            text: transcript || '（未识别到内容；可继续打字补充）',
+            text: transcript || (v.pendingAsr ? '识别中…' : '（未识别到内容；可继续打字补充）'),
             voicePath: v.tempFilePath,
             duration: v.duration,
+            asrPending: !!v.pendingAsr && !transcript,
           };
           setMessages((prev) => [...prev, voiceMsg]);
-          // If we got a transcript, kick off the AI response automatically
           if (transcript) {
+            // Came pre-transcribed (legacy path). Reply right away.
             setTimeout(() => triggerAiReplyForTranscript(transcript), 200);
+          } else if (v.pendingAsr) {
+            // Optimistic path: bubble is on screen, run ASR in background
+            // and update the bubble + trigger AI when text arrives.
+            transcribeFile(v.tempFilePath).then((text) => {
+              const trimmed = (text || '').trim();
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === voiceMsgId
+                    ? {
+                        ...m,
+                        text: trimmed || '（未识别到内容；可继续打字补充）',
+                        asrPending: false,
+                      }
+                    : m,
+                ),
+              );
+              if (trimmed) triggerAiReplyForTranscript(trimmed);
+            });
           }
         }
       } catch (e) {
@@ -78,25 +123,59 @@ export default function ChatPage() {
       { id: `u-asr-${Date.now()}`, role: 'user', text: transcript },
     ];
     const reply = await callDoubao(history);
-    setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'ai', text: reply }]);
+    const aiId = `a-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: aiId, role: 'ai', text: reply }]);
     setIsTyping(false);
+    beginTypewriter(aiId);
   };
 
   // Auto-scroll: toggle between two sentinel IDs so ScrollView always sees a
-  // changed value and re-fires scrollIntoView. The 80ms delay gives the new
-  // bubble time to mount in Skyline before the scroll happens.
+  // changed value and re-fires scrollIntoView. Two regimes:
+  //   1. Bubble add / typing-dot toggle — wait 80ms so the new node is mounted
+  //      in Skyline before scrollIntoView measures it.
+  //   2. Typewriter rolling — fire immediately but only every 4 chars so the
+  //      ScrollView's smooth-scroll animation gets time to play instead of
+  //      being interrupted on every keystroke (which looked stuck before).
   useEffect(() => {
+    const isTypewriter = !!typingMessageId;
+    if (isTypewriter && typingProgress % 4 !== 0) return;
+    const delay = isTypewriter ? 0 : 80;
     const t = setTimeout(() => {
       setScrollAnchor((prev) =>
         prev === 'chat-bottom-a' ? 'chat-bottom-b' : 'chat-bottom-a'
       );
-    }, 80);
+    }, delay);
     return () => clearTimeout(t);
-  }, [messages.length, isTyping]);
+  }, [messages.length, isTyping, typingMessageId, typingProgress]);
+
+  // P0-5: drive the typewriter. Advance one character every 32ms — fast enough
+  // to feel snappy on short replies, slow enough to read.
+  useEffect(() => {
+    if (!typingMessageId) return;
+    const target = messages.find((m) => m.id === typingMessageId)?.text || '';
+    if (typingProgress >= target.length) {
+      setTypingMessageId(null);
+      return;
+    }
+    // 10ms per char ≈ 60 字 in 0.6s — keep up with the eye after the model
+    // generation completes. The TTFT (typing dots → first char) dominates
+    // perceived latency, so reveal speed matters less than feeling responsive.
+    const t = setTimeout(() => setTypingProgress((p) => p + 1), 10);
+    return () => clearTimeout(t);
+  }, [typingMessageId, typingProgress, messages]);
+
+  const beginTypewriter = (id: string) => {
+    setTypingMessageId(id);
+    setTypingProgress(0);
+  };
 
   const failureCountRef = useRef(0);
   const audioRef = useRef<ReturnType<typeof Taro.createInnerAudioContext> | null>(null);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  // P0-10: once the user has dismissed the "去树洞发泄" suggestion in this
+  // session, don't keep re-popping the modal on every subsequent angry line —
+  // just let them keep chatting (sanitized) without interruption.
+  const hostilityModalDismissedRef = useRef(false);
 
   // ── Long-press recording in chat ────────────────────────────────
   const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
@@ -106,6 +185,10 @@ export default function ChatPage() {
   const recordingStartedRef = useRef(false); // synchronous state for touch handlers
   const pressTimerRef = useRef<NodeJS.Timeout | null>(null); // long-press confirmation timer
   const pressFiredRef = useRef(false); // did the long-press timer actually fire?
+  // Tracks whether the finger is still on the mic. Survives across the
+  // permission-modal await — if the user releases while the system dialog is
+  // still up, we use this flag to abort instead of starting a runaway recording.
+  const isPressingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -129,11 +212,66 @@ export default function ChatPage() {
   ) => {
     const trimmedTranscript = transcript.trim();
 
-    // Crisis safety net for voice transcripts too
-    if (trimmedTranscript && detectCrisis(trimmedTranscript)) {
+    // Optimistic path: bubble first with "识别中…", then ASR in background.
+    // This makes the chat feel responsive even though the network roundtrip
+    // is the same.
+    if (!trimmedTranscript) {
+      const voiceMsgId = `v-${Date.now()}`;
+      const voiceMsg: Message = {
+        id: voiceMsgId,
+        role: 'user',
+        kind: 'voice',
+        text: '识别中…',
+        voicePath: file,
+        duration: fmt(dur),
+        asrPending: true,
+      };
+      setMessages((prev) => [...prev, voiceMsg]);
+
+      const text = (await transcribeFile(file)).trim();
+
+      // Crisis check on the late-arriving transcript
+      if (text && detectCrisis(text)) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === voiceMsgId ? { ...m, text, asrPending: false } : m)),
+        );
+        const choice = await showCrisisModal();
+        if (choice === 'call') return;
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === voiceMsgId
+              ? { ...m, text: text || '（未识别到内容；可继续打字补充）', asrPending: false }
+              : m,
+          ),
+        );
+      }
+
+      if (text) {
+        setIsTyping(true);
+        // Build history off the latest committed messages by reading state
+        // through the functional updater pattern.
+        setMessages((prev) => {
+          const history: Message[] = [
+            ...prev,
+            { id: `u-asr-${Date.now()}`, role: 'user', text },
+          ];
+          callDoubao(history).then((reply) => {
+            const aiId = `a-${Date.now()}`;
+            setMessages((p) => [...p, { id: aiId, role: 'ai', text: reply }]);
+            setIsTyping(false);
+            beginTypewriter(aiId);
+          });
+          return prev;
+        });
+      }
+      return;
+    }
+
+    // Pre-transcribed path (legacy / external): show bubble + reply directly.
+    if (detectCrisis(trimmedTranscript)) {
       const choice = await showCrisisModal();
       if (choice === 'call') {
-        // Show the bubble but skip auto-AI-reply
         const voiceMsg: Message = {
           id: `v-${Date.now()}`,
           role: 'user',
@@ -147,31 +285,31 @@ export default function ChatPage() {
       }
     }
 
-    const text = trimmedTranscript || '（未识别到内容；可继续打字补充）';
     const voiceMsg: Message = {
       id: `v-${Date.now()}`,
       role: 'user',
       kind: 'voice',
-      text,
+      text: trimmedTranscript,
       voicePath: file,
       duration: fmt(dur),
     };
     const next = [...messages, voiceMsg];
     setMessages(next);
-    if (trimmedTranscript) {
-      setIsTyping(true);
-      const history: Message[] = [
-        ...next,
-        { id: `u-asr-${Date.now()}`, role: 'user', text: trimmedTranscript },
-      ];
-      callDoubao(history).then((reply) => {
-        setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'ai', text: reply }]);
-        setIsTyping(false);
-      });
-    }
+    setIsTyping(true);
+    const history: Message[] = [
+      ...next,
+      { id: `u-asr-${Date.now()}`, role: 'user', text: trimmedTranscript },
+    ];
+    callDoubao(history).then((reply) => {
+      const aiId = `a-${Date.now()}`;
+      setMessages((prev) => [...prev, { id: aiId, role: 'ai', text: reply }]);
+      setIsTyping(false);
+      beginTypewriter(aiId);
+    });
   };
 
   const beginActualRecording = () => {
+    if (recordingStartedRef.current) return;
     pressFiredRef.current = true;
     stopAudio();
     recordingStartedRef.current = true;
@@ -253,30 +391,26 @@ export default function ChatPage() {
     });
   };
 
-  const handleMicTouchStart = async (e: any) => {
+  const handleMicTouchStart = (e: any) => {
     if (pressTimerRef.current || recordingStartedRef.current) return; // guard
 
-    // Permission check up-front so the timer doesn't fire after the modal
-    try {
-      const setting = await Taro.getSetting();
-      if (setting.authSetting['scope.record'] === false) {
-        const ok = await Taro.showModal({
-          title: '需要麦克风权限',
-          content: '请在「设置」里允许小程序使用麦克风',
-          confirmText: '去开启',
-        });
-        if (ok.confirm) Taro.openSetting();
-        return;
-      }
-    } catch (_) {}
-
+    // Synchronous setup — auth check is deferred into the timer callback so
+    // a short tap can clear the timer and surface the toast hint without ever
+    // showing a permission modal.
     cancellingRef.current = false;
     setIsCancelling(false);
     pressFiredRef.current = false;
+    isPressingRef.current = true;
     startYRef.current = e?.touches?.[0]?.clientY ?? null;
 
-    pressTimerRef.current = setTimeout(() => {
+    pressTimerRef.current = setTimeout(async () => {
       pressTimerRef.current = null;
+      const granted = await ensureRecordPermission();
+      // User may have lifted the finger while the permission modal was up.
+      // Without this guard a runaway recording would start with no way to stop
+      // it short of the 60s ceiling.
+      if (!isPressingRef.current) return;
+      if (!granted) return;
       beginActualRecording();
     }, LONG_PRESS_MS);
   };
@@ -294,6 +428,7 @@ export default function ChatPage() {
 
   const handleMicTouchEnd = () => {
     startYRef.current = null;
+    isPressingRef.current = false;
     // Released before long-press fired → it was just a tap
     if (pressTimerRef.current) {
       clearTimeout(pressTimerRef.current);
@@ -377,7 +512,9 @@ export default function ChatPage() {
           mode: 'chat',
           messages: history.map((m) => ({
             role: m.role === 'ai' ? 'assistant' : 'user',
-            content: m.text,
+            content: m.role === 'ai'
+              ? m.text
+              : (detectHostility(m.text) ? sanitizeHostileForModel(m.text) : m.text),
           })),
         },
       });
@@ -413,15 +550,36 @@ export default function ChatPage() {
     const trimmed = input.trim();
     if (!trimmed || isTyping) return;
     if (trimmed.length > 500) return;
-
-    // Crisis safety net (PRD §5.2): prompt the hotline before sending to AI
-    if (detectCrisis(trimmed)) {
-      const choice = await showCrisisModal();
-      if (choice === 'call') {
-        // User went to call — don't send the message to AI, but keep in input
+    // P0-10: hostility intent gate. Suggest 树洞 the FIRST time we see a
+    // genuinely attacking message, but don't keep popping the modal — and
+    // don't bail to a canned local reply on "continue", just let doubao
+    // handle it with the sanitized prompt (still safer than raw passthrough).
+    const isHostile = detectHostility(trimmed);
+    if (isHostile && !hostilityModalDismissedRef.current) {
+      const choice = await showHostilityModal();
+      if (choice === 'treehouse') {
+        // Hand off the current draft so 树洞 can pre-fill it.
+        try { Taro.setStorageSync('treehouse-handoff', trimmed); } catch (_) {}
+        try { Taro.removeStorageSync('chat-draft'); } catch (_) {}
+        Taro.redirectTo({ url: '/pages/treehouse/index' }).catch(() => {
+          Taro.reLaunch({ url: '/pages/treehouse/index' });
+        });
         return;
       }
-      // 'continue' falls through to normal send
+      // User picked "继续聊" — mark dismissed so we never re-prompt this
+      // session, then fall through into the normal send path (which will
+      // sanitize the hostile content before handing it to doubao).
+      hostilityModalDismissedRef.current = true;
+    }
+
+    // Crisis safety net (PRD 5.2): prompt the hotline before sending to AI.
+    // Run after hostility so outward attacks like "你去死" go to treehouse,
+    // while self-harm language still gets the hotline flow.
+    if (!isHostile && detectCrisis(trimmed)) {
+      const choice = await showCrisisModal();
+      if (choice === 'call') {
+        return;
+      }
     }
 
     const userMsg: Message = {
@@ -432,16 +590,20 @@ export default function ChatPage() {
     const nextHistory = [...messages, userMsg];
     setMessages(nextHistory);
     setInput('');
+    // P0-9: draft was just sent, clear it
+    try { Taro.removeStorageSync('chat-draft'); } catch (_) {}
     setIsTyping(true);
 
     const replyText = await callDoubao(nextHistory);
+    const aiId = `a-${Date.now()}`;
     const aiMsg: Message = {
-      id: `a-${Date.now()}`,
+      id: aiId,
       role: 'ai',
       text: replyText,
     };
     setMessages((prev) => [...prev, aiMsg]);
     setIsTyping(false);
+    beginTypewriter(aiId);
   };
 
   const handleBridge = () => {
@@ -520,13 +682,18 @@ export default function ChatPage() {
 
           {messages.map((msg) => {
             if (msg.role === 'ai') {
+              const isStreaming = msg.id === typingMessageId;
+              const display = isStreaming ? msg.text.slice(0, typingProgress) : msg.text;
               return (
                 <View key={msg.id} id={msg.id} className="msg-row msg-row-ai">
                   <View className="avatar">
                     <Text className="avatar-emoji">🤍</Text>
                   </View>
                   <View className="bubble bubble-ai">
-                    <Text className="bubble-text bubble-text-ai">{msg.text}</Text>
+                    <Text className="bubble-text bubble-text-ai">
+                      {display}
+                      {isStreaming && <Text className="typewriter-caret">▍</Text>}
+                    </Text>
                   </View>
                 </View>
               );
@@ -554,7 +721,7 @@ export default function ChatPage() {
                     </View>
                     <Text className="voice-duration">{msg.duration || '0:00'}</Text>
                   </View>
-                  <View className="voice-asr-hint">
+                  <View className={`voice-asr-hint ${msg.asrPending ? 'is-pending' : ''}`}>
                     <Text className="voice-asr-hint-text">{msg.text}</Text>
                   </View>
                 </View>
@@ -614,7 +781,13 @@ export default function ChatPage() {
             fixed
             cursorSpacing={24}
             disableDefaultPadding
-            onInput={(e) => setInput(e.detail.value)}
+            onInput={(e) => {
+              const v = e.detail.value;
+              setInput(v);
+              // P0-9: hard-bind draft to storage on every keystroke so the
+              // user never loses input on app kill / page leave / crash.
+              try { Taro.setStorageSync('chat-draft', v); } catch (_) {}
+            }}
           />
 
           {input.trim().length > 0 ? (
@@ -638,9 +811,6 @@ export default function ChatPage() {
           )}
         </View>
 
-        {input.trim().length === 0 && !isRecording && (
-          <Text className="voice-hint">长按麦克风录音 · 上滑取消发送</Text>
-        )}
       </View>
 
       {/* Recording overlay */}

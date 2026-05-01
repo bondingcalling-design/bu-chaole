@@ -1,24 +1,24 @@
-// ASR proxy — 火山引擎 录音文件识别 (极速版).
+// ASR proxy — 火山引擎「一句话识别」同步 HTTP 接口（短语音 < 60s）.
 //
 // Required cloud-function env vars (set in cloud console after deploy):
 //   VOLC_ASR_APPID    — 火山引擎语音技术「应用 AppID」
 //   VOLC_ASR_TOKEN    — Access Token
-//   VOLC_ASR_CLUSTER  — Cluster ID (默认 "volc_auc_common")
+//   VOLC_ASR_CLUSTER  — Cluster ID（一句话识别用 "volcengine_input_common"，
+//                                  录音文件识别才是 "volc_auc_common"）
 //
-// Caller invokes: cloud.callFunction({ name: 'asr', data: { fileID } })
-// Returns: { ok: true, text: '...' } or { ok: false, error: '...' }
+// Caller invokes: cloud.callFunction({ name: 'asr', data: { audio, format } })
+//   audio:  base64 string of the mp3/wav bytes
+//   format: 'mp3' | 'wav' | 'pcm' | 'ogg'   (default 'mp3')
+// Returns: { ok: true, text: '...', ms } or { ok: false, error: '...' }
 
 const cloud = require('wx-server-sdk');
 const https = require('https');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const HOST = 'openspeech.bytedance.com';
-const SUBMIT_PATH = '/api/v1/auc/submit';
-const QUERY_PATH = '/api/v1/auc/query';
-const POLL_INTERVAL_MS = 1000;
-const POLL_TIMEOUT_MS = 45000; // remember to bump SCF function timeout to >=60s in cloud console
+const ASR_PATH = '/api/v1/asr';
 
-function postJson(host, path, headers, payload, timeoutMs = 12000) {
+function postJson(host, path, headers, payload, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const data = Buffer.from(JSON.stringify(payload));
     const req = https.request(
@@ -45,117 +45,77 @@ function postJson(host, path, headers, payload, timeoutMs = 12000) {
       }
     );
     req.on('error', reject);
-    req.setTimeout(timeoutMs, () => req.destroy(new Error(`http timeout`)));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('http timeout')));
     req.write(data);
     req.end();
   });
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 exports.main = async (event) => {
   const APPID = process.env.VOLC_ASR_APPID;
   const TOKEN = process.env.VOLC_ASR_TOKEN;
-  const CLUSTER = process.env.VOLC_ASR_CLUSTER || 'volc_auc_common';
+  const CLUSTER = process.env.VOLC_ASR_CLUSTER || 'volcengine_input_common';
 
   if (!APPID || !TOKEN) {
     return { ok: false, error: 'cloud function env vars VOLC_ASR_APPID / VOLC_ASR_TOKEN not set' };
   }
 
-  const { fileID } = event || {};
-  if (!fileID || typeof fileID !== 'string') {
-    return { ok: false, error: 'fileID required' };
-  }
-
-  // 1. Resolve cloud:// fileID to an HTTPS URL
-  let httpsUrl;
-  try {
-    const r = await cloud.getTempFileURL({ fileList: [fileID] });
-    httpsUrl = r.fileList?.[0]?.tempFileURL;
-    if (!httpsUrl) return { ok: false, error: 'getTempFileURL returned no url', detail: r };
-  } catch (e) {
-    return { ok: false, error: 'getTempFileURL failed: ' + (e?.message || e) };
+  const { audio, format } = event || {};
+  if (!audio || typeof audio !== 'string') {
+    return { ok: false, error: 'audio (base64 string) required' };
   }
 
   const reqid = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  const submitBody = {
+  const body = {
     app: { appid: APPID, token: TOKEN, cluster: CLUSTER },
     user: { uid: 'listen-mp' },
-    audio: { format: 'mp3', url: httpsUrl },
-    additions: { use_itn: 'True', with_speaker_info: 'False' },
-    request: { reqid, sequence: -1 },
+    audio: {
+      format: format || 'mp3',
+      rate: 16000,
+      channel: 1,
+      bits: 16,
+      data: audio,
+    },
+    request: {
+      reqid,
+      sequence: -1,
+      show_language: false,
+      show_utterances: false,
+    },
   };
 
-  // 2. Submit ASR task
-  let submit;
+  const t0 = Date.now();
+  let resp;
   try {
-    submit = await postJson(HOST, SUBMIT_PATH, {
+    resp = await postJson(HOST, ASR_PATH, {
       Authorization: `Bearer; ${TOKEN}`,
-    }, submitBody);
+    }, body, 10000);
   } catch (e) {
-    return { ok: false, error: 'submit failed: ' + (e?.message || e) };
+    return { ok: false, error: 'http error: ' + (e?.message || e) };
   }
-  if (submit.status < 200 || submit.status >= 300) {
-    return { ok: false, error: `submit ${submit.status}`, detail: submit.json || submit.body };
-  }
-  const submitJson = submit.json || {};
-  if (submitJson.resp?.code && submitJson.resp.code !== 1000) {
-    return { ok: false, error: `submit code ${submitJson.resp.code}`, detail: submitJson };
-  }
-  const taskId = submitJson.resp?.id || submitJson.id;
-  if (!taskId) return { ok: false, error: 'no task id returned', detail: submitJson };
+  const ms = Date.now() - t0;
+  console.log('[asr-sync]', {
+    ms,
+    status: resp.status,
+    code: resp.json?.code ?? resp.json?.resp?.code,
+    message: resp.json?.message ?? resp.json?.resp?.message,
+  });
 
-  // 3. Poll for result.
-  //   Volcengine ASR codes (relevant subset):
-  //     1000 = success
-  //     1xxx = queued / processing (1001 = queued, 1002/1003 = running, ...)
-  //     2xxx = informational (2000 = "Start processing", task pre-flight)
-  //     >= 4000 = hard error
-  const queryBody = {
-    appid: APPID,
-    token: TOKEN,
-    cluster: CLUSTER,
-    id: taskId,
-  };
-  const start = Date.now();
-  let lastCode = null;
-  let lastMsg = null;
-  while (Date.now() - start < POLL_TIMEOUT_MS) {
-    await sleep(POLL_INTERVAL_MS);
-    let q;
-    try {
-      q = await postJson(HOST, QUERY_PATH, { Authorization: `Bearer; ${TOKEN}` }, queryBody);
-    } catch (e) {
-      continue; // network blip, retry next tick
-    }
-    const j = q.json || {};
-    const code = j.resp?.code;
-    lastCode = code;
-    lastMsg = j.resp?.message;
-    console.log('[asr poll]', { code, message: lastMsg });
-
-    if (code === 1000) {
-      const text = j.resp?.text
-        || (Array.isArray(j.resp?.utterances) && j.resp.utterances.map((u) => u.text || '').join(''))
-        || '';
-      // Surface the additions field so we can see what Volcengine measured
-      console.log('[asr success]', {
-        text,
-        additions: j.resp?.additions,
-        utterancesCount: (j.resp?.utterances || []).length,
-      });
-      return { ok: true, text, taskId, additions: j.resp?.additions };
-    }
-    // Treat 1xxx + 2xxx as "still working"; anything 4xxx+ is a hard error.
-    if (typeof code === 'number' && code >= 4000) {
-      return { ok: false, error: `asr code ${code}: ${lastMsg || ''}`, detail: j };
-    }
+  if (resp.status < 200 || resp.status >= 300) {
+    return { ok: false, error: `http ${resp.status}`, detail: resp.json || resp.body, ms };
   }
 
-  return {
-    ok: false,
-    error: `asr poll timeout (lastCode=${lastCode} lastMsg=${lastMsg})`,
-  };
+  const j = resp.json || {};
+  // 一句话识别 sync 返回顶层 code/message/result；做防御性兼容
+  const code = j.code ?? j.resp?.code;
+  const message = j.message ?? j.resp?.message;
+  if (code !== 1000) {
+    return { ok: false, error: `asr code ${code}: ${message || ''}`, detail: j, ms };
+  }
+  const text =
+    (Array.isArray(j.result) && j.result.map((r) => r.text || '').join('')) ||
+    j.text ||
+    j.resp?.text ||
+    '';
+  return { ok: true, text, ms };
 };

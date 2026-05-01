@@ -74,6 +74,16 @@ export default function LoadingPage() {
         },
       });
       const result: any = res.result;
+      console.log('[loading] doubao report result', {
+        ok: result?.ok,
+        hasReport: !!result?.report,
+        reportKeys: result?.report ? Object.keys(result.report) : null,
+        finishReason: result?.finishReason,
+        parseError: result?.parseError,
+        rawLen: result?.raw?.length,
+        rawHead: result?.raw?.slice?.(0, 120),
+        usage: result?.usage,
+      });
       if (result?.ok) {
         report = result.report || null;
         rawText = result.raw || '';

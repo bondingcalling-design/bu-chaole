@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView, Canvas } from '@tarojs/components';
+import { View, Text, Image, ScrollView, Canvas, Textarea } from '@tarojs/components';
 import Taro, { useLoad, useReady } from '@tarojs/taro';
 import { useMemo, useState } from 'react';
 
@@ -8,7 +8,7 @@ import iconBack from '@/assets/icons/chevron-left.svg';
 import './index.less';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type TransTab = '温柔' | '理性' | '直白';
+type TransTab = '温柔' | '客观' | '直白';
 
 // Lean schema returned by the upgraded Doubao prompt.
 interface RawReport {
@@ -77,9 +77,9 @@ const MOCK_TRANSLATIONS: Record<TransTab, { text: string; tone: string; emoji: s
     tone: '温柔共情型',
     emoji: '🌸',
   },
-  理性: {
+  客观: {
     text: '你今天回家后持续沉默，这影响了我们的沟通效率。如果有什么事情，提前说明会让双方都更舒适，减少误解。',
-    tone: '理性陈述型',
+    tone: '客观陈述型',
     emoji: '🎯',
   },
   直白: {
@@ -136,7 +136,13 @@ const MOCK_INSIGHTS = [
   },
 ];
 
-const TRANS_TABS: TransTab[] = ['温柔', '理性', '直白'];
+const POSTER_CANVAS_ID = 'rp-poster-canvas';
+const TRANS_TABS: TransTab[] = ['温柔', '客观', '直白'];
+const TRANS_STYLE: Record<TransTab, { tone: string; emoji: string; key: 'tender' | 'rational' | 'direct' }> = {
+  温柔: { tone: '温柔共情型', emoji: '🌸', key: 'tender' },
+  客观: { tone: '客观陈述型', emoji: '🎯', key: 'rational' },
+  直白: { tone: '直白表达型', emoji: '⚡️', key: 'direct' },
+};
 const CANVAS_ID = 'radar-canvas';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -156,6 +162,11 @@ export default function ReportPage() {
   const [missing, setMissing] = useState(false);
   const [activeTrans, setActiveTrans] = useState<TransTab>('温柔');
   const [expanded, setExpanded] = useState<Set<number>>(new Set([0]));
+  // User-input AI translate
+  const [transInput, setTransInput] = useState('');
+  const [translating, setTranslating] = useState(false);
+  const [aiTrans, setAiTrans] = useState<Record<TransTab, string> | null>(null);
+  const [activeAiTrans, setActiveAiTrans] = useState<TransTab>('温柔');
 
   useLoad(() => {
     try {
@@ -190,11 +201,7 @@ export default function ReportPage() {
       advice:        { emoji: '💡', label: '破局建议',     color: 'rgba(255,215,100,1)', bg: 'rgba(255,215,100,0.08)', border: 'rgba(255,215,100,0.22)' },
     };
 
-    const STYLE_TRANS = {
-      温柔: { tone: '温柔共情型', emoji: '🌸', key: 'tender' as const },
-      理性: { tone: '理性陈述型', emoji: '🎯', key: 'rational' as const },
-      直白: { tone: '直白表达型', emoji: '⚡️', key: 'direct' as const },
-    };
+    const STYLE_TRANS = TRANS_STYLE;
 
     return {
       title: r.title || '今日心绪',
@@ -226,7 +233,7 @@ export default function ReportPage() {
       translations: tr
         ? {
             温柔: { text: tr.tender   || MOCK_TRANSLATIONS['温柔'].text, tone: STYLE_TRANS['温柔'].tone, emoji: STYLE_TRANS['温柔'].emoji },
-            理性: { text: tr.rational || MOCK_TRANSLATIONS['理性'].text, tone: STYLE_TRANS['理性'].tone, emoji: STYLE_TRANS['理性'].emoji },
+            客观: { text: tr.rational || MOCK_TRANSLATIONS['客观'].text, tone: STYLE_TRANS['客观'].tone, emoji: STYLE_TRANS['客观'].emoji },
             直白: { text: tr.direct   || MOCK_TRANSLATIONS['直白'].text, tone: STYLE_TRANS['直白'].tone, emoji: STYLE_TRANS['直白'].emoji },
           }
         : MOCK_TRANSLATIONS,
@@ -258,6 +265,90 @@ export default function ReportPage() {
         : MOCK_INSIGHTS,
     };
   }, [record]);
+
+  // Compute radar warning from real data instead of hardcoding "攻击偏高".
+  // - 攻击 / 防御 high (>=55) is bad; 共情 / 倾听 / 逻辑 low (<=35) is bad.
+  // - Pick the most extreme issue. If everything's healthy, give a positive nudge.
+  const radarHighlight = useMemo(() => {
+    const get = (s: string) => view.radar.find((d) => d.subject === s)?.value ?? 0;
+    const aggression = get('攻击');
+    const defense = get('防御');
+    const empathy = get('共情');
+    const listening = get('倾听');
+    const logic = get('逻辑');
+
+    type Issue = { subject: string; value: number; type: 'high' | 'low'; severity: number };
+    const issues: Issue[] = [];
+    if (aggression >= 55) issues.push({ subject: '攻击', value: aggression, type: 'high', severity: aggression });
+    if (defense   >= 55) issues.push({ subject: '防御', value: defense,    type: 'high', severity: defense });
+    if (empathy   <= 35) issues.push({ subject: '共情', value: empathy,    type: 'low',  severity: 100 - empathy });
+    if (listening <= 35) issues.push({ subject: '倾听', value: listening,  type: 'low',  severity: 100 - listening });
+    if (logic     <= 35) issues.push({ subject: '逻辑', value: logic,      type: 'low',  severity: 100 - logic });
+
+    if (issues.length === 0) {
+      return {
+        emoji: '✅',
+        text: '本次沟通整体平衡，五维表现都在健康区间，继续保持。',
+        tone: 'good' as const,
+      };
+    }
+    issues.sort((a, b) => b.severity - a.severity);
+    const top = issues[0];
+
+    const adviceHigh: Record<string, string> = {
+      攻击: '情绪化表达比例较大，建议在平静状态下再次沟通。',
+      防御: '反驳和自我保护偏多，可以试着先承认对方有道理的部分。',
+    };
+    const adviceLow: Record<string, string> = {
+      共情: '可以先回应对方的感受，再表达自己的观点。',
+      倾听: '试着放慢节奏，让对方说完再回应。',
+      逻辑: '把诉求拆成一两个具体的点，会让对方更容易听懂。',
+    };
+    return {
+      emoji: top.type === 'high' ? '⚠️' : '💡',
+      text:
+        top.type === 'high'
+          ? `${top.subject}指数偏高（${top.value}）——${adviceHigh[top.subject]}`
+          : `${top.subject}指数偏低（${top.value}）——${adviceLow[top.subject]}`,
+      tone: top.type,
+    };
+  }, [view.radar]);
+
+  const runTranslate = async () => {
+    const text = transInput.trim();
+    if (!text) {
+      Taro.showToast({ title: '先写两句吧', icon: 'none' });
+      return;
+    }
+    if (translating) return;
+    setTranslating(true);
+    try {
+      const res = await Taro.cloud.callFunction({
+        name: 'doubao',
+        data: { mode: 'translate', messages: [{ role: 'user', content: text }] },
+      });
+      const r: any = res.result;
+      if (r?.ok && r.translations) {
+        setAiTrans({
+          温柔: r.translations.tender   || '',
+          客观: r.translations.rational || '',
+          直白: r.translations.direct   || '',
+        });
+        setActiveAiTrans('温柔');
+        Taro.showToast({ title: '翻译完成', icon: 'success' });
+      } else if (r?.blocked) {
+        Taro.showToast({ title: '内容未通过安全检测', icon: 'none' });
+      } else {
+        console.warn('translate fn error', r);
+        Taro.showToast({ title: '翻译失败，再试一次', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('translate call failed', e);
+      Taro.showToast({ title: '网络异常', icon: 'none' });
+    } finally {
+      setTranslating(false);
+    }
+  };
 
   // Draw the radar after canvas is ready and data is merged
   useReady(() => {
@@ -362,8 +453,6 @@ export default function ReportPage() {
     Taro.navigateBack().catch(() => Taro.reLaunch({ url: '/pages/review/index' }));
   };
 
-  const goHistory = () => Taro.navigateTo({ url: '/pages/history/index' });
-
   const toggleExpanded = (i: number) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -377,8 +466,158 @@ export default function ReportPage() {
     Taro.setClipboardData({ data: text, success: () => Taro.showToast({ title: '已复制', icon: 'success' }) });
   };
 
+  // P0-8: render a shareable card to canvas → save to album. The user can
+  // then forward the image to 对方 / 朋友圈 directly. We use the currently
+  // selected translation tab as the headline content.
+  const [posterBusy, setPosterBusy] = useState(false);
   const sharePoster = () => {
-    Taro.showToast({ title: '海报功能开发中，可截图分享', icon: 'none', duration: 1800 });
+    if (posterBusy) return;
+    setPosterBusy(true);
+    Taro.showLoading({ title: '生成海报中…', mask: true });
+
+    Taro.createSelectorQuery()
+      .select(`#${POSTER_CANVAS_ID}`)
+      .fields({ node: true, size: true } as any)
+      .exec(async (res) => {
+        try {
+          const node = res?.[0]?.node;
+          if (!node) throw new Error('canvas node missing');
+          const ctx = node.getContext('2d');
+          const dpr = (Taro.getSystemInfoSync && Taro.getSystemInfoSync().pixelRatio) || 2;
+          const W = 600;
+          const H = 880;
+          node.width = W * dpr;
+          node.height = H * dpr;
+          ctx.scale(dpr, dpr);
+
+          // background gradient
+          const grad = ctx.createLinearGradient(0, 0, 0, H);
+          grad.addColorStop(0, '#1A2350');
+          grad.addColorStop(0.55, '#0E1830');
+          grad.addColorStop(1, '#080F22');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, W, H);
+
+          // soft glow blob
+          const blob = ctx.createRadialGradient(W * 0.85, H * 0.18, 10, W * 0.85, H * 0.18, 240);
+          blob.addColorStop(0, 'rgba(180, 215, 255, 0.18)');
+          blob.addColorStop(1, 'rgba(180, 215, 255, 0)');
+          ctx.fillStyle = blob;
+          ctx.fillRect(0, 0, W, H);
+
+          // small label
+          ctx.font = '500 18px -apple-system, sans-serif';
+          ctx.fillStyle = 'rgba(180, 220, 255, 0.55)';
+          ctx.textAlign = 'left';
+          ctx.fillText('· 倾听 · 高情商翻译 ·', 48, 80);
+
+          // tone row (emoji + tone label)
+          ctx.font = '600 26px -apple-system, sans-serif';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+          ctx.fillText(`${t.emoji}  ${t.tone}`, 48, 132);
+
+          // headline: the translation text — wrap by character (CJK-safe)
+          const headline = t.text || '';
+          ctx.font = '600 34px -apple-system, sans-serif';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+          ctx.textBaseline = 'alphabetic';
+          const maxWidth = W - 96;
+          const lineHeight = 56;
+          let line = '';
+          let y = 200;
+          for (let i = 0; i < headline.length; i++) {
+            const test = line + headline[i];
+            if (ctx.measureText(test).width > maxWidth && line.length > 0) {
+              ctx.fillText(line, 48, y);
+              line = headline[i];
+              y += lineHeight;
+              if (y > H - 280) { line = line + '…'; break; }
+            } else {
+              line = test;
+            }
+          }
+          if (line) ctx.fillText(line, 48, y);
+
+          // divider
+          ctx.strokeStyle = 'rgba(200, 220, 255, 0.18)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(48, H - 220);
+          ctx.lineTo(W - 48, H - 220);
+          ctx.stroke();
+
+          // summary preview (small, gray)
+          ctx.font = '300 22px -apple-system, sans-serif';
+          ctx.fillStyle = 'rgba(220, 230, 255, 0.55)';
+          const summary = view.summary || '';
+          let sline = '';
+          let sy = H - 178;
+          for (let i = 0; i < summary.length; i++) {
+            const test = sline + summary[i];
+            if (ctx.measureText(test).width > maxWidth && sline.length > 0) {
+              ctx.fillText(sline, 48, sy);
+              sline = summary[i];
+              sy += 36;
+              if (sy > H - 110) { sline = sline + '…'; break; }
+            } else {
+              sline = test;
+            }
+          }
+          if (sline) ctx.fillText(sline, 48, sy);
+
+          // footer
+          ctx.font = '600 22px -apple-system, sans-serif';
+          ctx.fillStyle = 'rgba(180, 220, 255, 0.78)';
+          ctx.textAlign = 'left';
+          ctx.fillText('🌸 倾听 · 沟通秘书', 48, H - 56);
+
+          ctx.font = '400 18px -apple-system, sans-serif';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
+          ctx.textAlign = 'right';
+          ctx.fillText(record ? formatDate(record.createdAt) : '', W - 48, H - 56);
+
+          // export
+          const file = await new Promise<string>((resolve, reject) => {
+            (Taro as any).canvasToTempFilePath({
+              canvas: node,
+              x: 0,
+              y: 0,
+              width: W,
+              height: H,
+              destWidth: W * dpr,
+              destHeight: H * dpr,
+              success: (r: any) => resolve(r.tempFilePath),
+              fail: (e: any) => reject(e),
+            });
+          });
+
+          // save → album with permission flow
+          try {
+            await Taro.saveImageToPhotosAlbum({ filePath: file });
+            Taro.hideLoading();
+            Taro.showToast({ title: '海报已保存到相册', icon: 'success', duration: 1800 });
+          } catch (e: any) {
+            Taro.hideLoading();
+            const msg = e?.errMsg || '';
+            if (msg.includes('auth deny') || msg.includes('cancel')) {
+              const r = await Taro.showModal({
+                title: '需要相册权限',
+                content: '保存海报需要你授权写入相册',
+                confirmText: '去开启',
+              });
+              if (r.confirm) Taro.openSetting();
+            } else {
+              Taro.showToast({ title: '保存失败，可截图分享', icon: 'none', duration: 1800 });
+            }
+          }
+        } catch (e) {
+          console.error('poster gen failed', e);
+          Taro.hideLoading();
+          Taro.showToast({ title: '生成失败，可截图分享', icon: 'none' });
+        } finally {
+          setPosterBusy(false);
+        }
+      });
   };
 
   const fbToast = (msg: string) => Taro.showToast({ title: msg, icon: 'none' });
@@ -396,9 +635,7 @@ export default function ReportPage() {
           <View className="rp-title-wrap">
             <Text className="rp-nav-title">复盘报告</Text>
           </View>
-          <View className="rp-history-link" onClick={goHistory}>
-            <Text className="rp-history-text">历史</Text>
-          </View>
+          <View className="rp-header-spacer" />
         </View>
         <View className="rp-missing">
           <Text className="rp-missing-text">还没有复盘报告，先去和小听聊聊吧。</Text>
@@ -428,9 +665,7 @@ export default function ReportPage() {
           <Text className="rp-nav-title">复盘报告</Text>
           <Text className="rp-nav-date">{record ? formatDate(record.createdAt) : ''}</Text>
         </View>
-        <View className="rp-history-link" onClick={goHistory} hoverClass="rp-history-link--hover">
-          <Text className="rp-history-text">历史</Text>
-        </View>
+        <View className="rp-header-spacer" />
       </View>
 
       <View className="rp-divider" />
@@ -550,6 +785,77 @@ export default function ReportPage() {
             </View>
           </View>
 
+          {/* ── User-input AI translate ───────────────────── */}
+          <View className="card">
+            <View className="card-pad">
+              <Text className="section-label">翻译你想说的话</Text>
+              <Text className="section-title">AI 帮你换种说法</Text>
+              <Text className="section-sub">把气话、抱怨、讲不出口的话写下来，AI 给你三种说法。</Text>
+
+              <View className="ti-input-wrap">
+                <Textarea
+                  className="ti-input"
+                  value={transInput}
+                  onInput={(e) => setTransInput(e.detail.value)}
+                  placeholder="例如：你又一声不吭，我已经第三次了…"
+                  maxlength={300}
+                  showConfirmBar={false}
+                  adjustPosition
+                />
+                <Text className="ti-counter">{transInput.length}/300</Text>
+              </View>
+
+              <View
+                className={`ti-btn ${translating ? 'is-disabled' : ''}`}
+                onClick={runTranslate}
+                hoverClass={translating ? '' : 'ti-btn--hover'}
+              >
+                <Text className="ti-btn-text">
+                  {translating ? '翻译中…' : '✨ 用 AI 帮我说'}
+                </Text>
+              </View>
+
+              {aiTrans && (
+                <View className="ti-result">
+                  <View className="trans-tabs">
+                    {TRANS_TABS.map((tab) => {
+                      const isA = tab === activeAiTrans;
+                      return (
+                        <View
+                          key={tab}
+                          className={`trans-tab ${isA ? 'is-active' : ''}`}
+                          onClick={() => setActiveAiTrans(tab)}
+                          hoverClass="trans-tab--hover"
+                        >
+                          <Text className={`trans-tab-emoji ${isA ? 'is-active' : ''}`}>
+                            {TRANS_STYLE[tab].emoji}
+                          </Text>
+                          <Text className={`trans-tab-label ${isA ? 'is-active' : ''}`}>{tab}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  <View className="trans-card">
+                    <View className="trans-tone-row">
+                      <Text className="trans-tone-emoji">{TRANS_STYLE[activeAiTrans].emoji}</Text>
+                      <Text className="trans-tone-label">{TRANS_STYLE[activeAiTrans].tone}</Text>
+                    </View>
+                    <Text className="trans-text">{aiTrans[activeAiTrans] || '（AI 没给出这一档，点上方按钮再试一次）'}</Text>
+                  </View>
+
+                  <View
+                    className="trans-copy-btn"
+                    onClick={() => copyTranslation(aiTrans[activeAiTrans])}
+                    hoverClass="trans-copy-btn--hover"
+                  >
+                    <Text className="trans-copy-text">一键复制</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+
           {/* ── Radar chart ───────────────────────────────── */}
           <View className="card">
             <View className="card-pad">
@@ -581,11 +887,9 @@ export default function ReportPage() {
                 ))}
               </View>
 
-              <View className="radar-warn">
-                <Text className="radar-warn-emoji">⚠️</Text>
-                <Text className="radar-warn-text">
-                  攻击指数偏高（{view.radar.find((r) => r.subject === '攻击')?.value || '--'}）——情绪化表达比例较大，建议在平静状态下再次沟通。
-                </Text>
+              <View className={`radar-warn radar-warn-${radarHighlight.tone}`}>
+                <Text className="radar-warn-emoji">{radarHighlight.emoji}</Text>
+                <Text className="radar-warn-text">{radarHighlight.text}</Text>
               </View>
             </View>
           </View>
@@ -637,14 +941,30 @@ export default function ReportPage() {
           </View>
 
           {/* ── Generate poster ───────────────────────────── */}
-          <View className="poster-btn" onClick={sharePoster} hoverClass="poster-btn--hover">
+          <View
+            className={`poster-btn ${posterBusy ? 'is-busy' : ''}`}
+            onClick={sharePoster}
+            hoverClass={posterBusy ? '' : 'poster-btn--hover'}
+          >
             <Text className="poster-btn-emoji">✨</Text>
-            <Text className="poster-btn-text">生成分享海报</Text>
+            <Text className="poster-btn-text">{posterBusy ? '生成中…' : '生成分享海报'}</Text>
           </View>
 
           <View className="rp-foot-space" />
         </View>
       </ScrollView>
+
+      {/* Off-screen canvas for poster rendering. Positioned outside the
+       * viewport so it doesn't interfere with layout but can still be drawn
+       * onto and exported via canvasToTempFilePath. */}
+      <View className="poster-canvas-wrap">
+        <Canvas
+          type="2d"
+          id={POSTER_CANVAS_ID}
+          canvasId={POSTER_CANVAS_ID}
+          className="poster-canvas"
+        />
+      </View>
     </View>
   );
 }
