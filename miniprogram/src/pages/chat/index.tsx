@@ -7,7 +7,16 @@ import iconBack from '@/assets/icons/chevron-left.svg';
 import iconSend from '@/assets/icons/send.svg';
 import iconMicSmall from '@/assets/icons/mic-small.svg';
 import iconFileText from '@/assets/icons/file-text.svg';
+import iconClock from '@/assets/icons/clock.svg';
+import iconMessagePlus from '@/assets/icons/message-plus.svg';
 import { getAsrManager, isAsrSupported, AsrStopResult, transcribeFile } from '@/utils/asr';
+import {
+  archiveDraft,
+  clearCurrent,
+  getCurrent,
+  saveCurrent,
+  takeResume,
+} from '@/utils/chatDrafts';
 import { detectCrisis, showCrisisModal } from '@/utils/crisisDetect';
 import { detectHostility, sanitizeHostileForModel, showHostilityModal } from '@/utils/intentDetect';
 import { ensureRecordPermission } from '@/utils/recordPerm';
@@ -33,10 +42,34 @@ const INITIAL_MESSAGES: Message[] = [
 
 const FALLBACK_REPLY = '我听着呢，你继续说。';
 
+// Lazy initial-state read: prefer a draft the user just clicked into from
+// history, then fall back to the in-flight conversation persisted to storage,
+// finally the fresh seed. Doing this in the useState initializer (vs. useLoad)
+// avoids the seed flashing on screen before the saved messages swap in.
+const readInitialMessages = (): { messages: Message[]; id?: string } => {
+  try {
+    const resume = takeResume();
+    if (resume && resume.messages.length > 0) {
+      // Persist immediately so the in-effect "current" matches what we render
+      saveCurrent(resume.messages as Message[], resume.id);
+      return { messages: resume.messages as Message[], id: resume.id };
+    }
+    const cur = getCurrent();
+    if (cur && cur.messages.length > 0) {
+      return { messages: cur.messages as Message[], id: cur.id };
+    }
+  } catch (_) {}
+  return { messages: INITIAL_MESSAGES };
+};
+
 export default function ChatPage() {
   const router = useRouter();
 
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  // Lazy initializer — runs exactly once on mount so the side-effecting
+  // takeResume() inside doesn't fire on every re-render.
+  const [initial] = useState(readInitialMessages);
+  const [messages, setMessages] = useState<Message[]>(initial.messages);
+  const conversationIdRef = useRef<string | undefined>(initial.id);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [bridgePulsing, setBridgePulsing] = useState(false);
@@ -49,6 +82,37 @@ export default function ChatPage() {
 
   const userMsgCount = messages.filter((m) => m.role === 'user').length;
   const progressPct = Math.min(92, 30 + userMsgCount * 15);
+
+  // Persist the in-flight conversation on every change so the user can leave
+  // the page (or background the app) and come back without losing it. Only
+  // touches storage once there's actual user content to save. We sync the
+  // local id ref back from storage on first save so subsequent archives can
+  // overwrite the same draft slot instead of creating duplicates.
+  useEffect(() => {
+    if (userMsgCount === 0) return;
+    saveCurrent(messages, conversationIdRef.current);
+    if (!conversationIdRef.current) {
+      const cur = getCurrent();
+      if (cur) conversationIdRef.current = cur.id;
+    }
+  }, [messages, userMsgCount]);
+
+  // Returning to chat from history → drafts: takeResume() consumes the
+  // handoff, archives the current chat (if any) into drafts, and swaps in
+  // the picked draft. Use a functional setState so we read the latest
+  // messages without depending on closure freshness in useDidShow.
+  useDidShow(() => {
+    const resume = takeResume();
+    if (!resume || resume.messages.length === 0) return;
+    setMessages((prev) => {
+      if (prev.some((m) => m.role === 'user')) {
+        archiveDraft(prev, conversationIdRef.current);
+      }
+      return resume.messages as Message[];
+    });
+    conversationIdRef.current = resume.id;
+    saveCurrent(resume.messages as Message[], resume.id);
+  });
 
   // P0-9: restore draft on entry. Draft is wiped after a successful send so
   // it doesn't bleed into the next conversation. Also re-check on every
@@ -635,6 +699,71 @@ export default function ChatPage() {
     });
   };
 
+  // ── New conversation ───────────────────────────────────────────
+  // Archive the current chat as a draft (so it shows in history → drafts),
+  // then reset the page to the seed state. Called from the top-right "新对话"
+  // button. Skips the modal when there's nothing to save.
+  const handleNewConversation = async () => {
+    if (userMsgCount === 0) {
+      Taro.showToast({ title: '当前还没有对话', icon: 'none' });
+      return;
+    }
+    const res = await Taro.showModal({
+      title: '开始新对话',
+      content: '当前对话会保存到草稿，可以在「历史」里继续聊',
+      confirmText: '保存并新建',
+      cancelText: '取消',
+      confirmColor: '#7AB7FF',
+    });
+    if (!res.confirm) return;
+    archiveDraft(messages, conversationIdRef.current);
+    clearCurrent();
+    conversationIdRef.current = undefined;
+    setMessages(INITIAL_MESSAGES);
+    setInput('');
+    try { Taro.removeStorageSync('chat-draft'); } catch (_) {}
+    stopAudio();
+  };
+
+  // Open history → drafts tab
+  const goToDrafts = () => {
+    Taro.navigateTo({ url: '/pages/history/index?tab=drafts' });
+  };
+
+  // ── Per-message actions ────────────────────────────────────────
+  // WeChat-style long press: ActionSheet with 复制 / 删除. Voice messages
+  // copy their transcript text. Deleting only removes the bubble locally;
+  // we don't ripple to the AI history (the user can ask again if needed).
+  const handleBubbleLongPress = (msg: Message) => {
+    Taro.showActionSheet({
+      itemList: ['复制', '删除'],
+    })
+      .then(async (res) => {
+        if (res.tapIndex === 0) {
+          const text = (msg.text || '').trim();
+          if (!text) {
+            Taro.showToast({ title: '没有可复制的文字', icon: 'none' });
+            return;
+          }
+          try {
+            await Taro.setClipboardData({ data: text });
+          } catch (_) {}
+        } else if (res.tapIndex === 1) {
+          const confirm = await Taro.showModal({
+            title: '删除消息',
+            content: '这条消息将从当前对话中移除',
+            confirmText: '删除',
+            cancelText: '取消',
+            confirmColor: '#FF6F8A',
+          });
+          if (!confirm.confirm) return;
+          if (playingVoiceId === msg.id) stopAudio();
+          setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+        }
+      })
+      .catch(() => {});
+  };
+
   return (
     <View className="chat-root">
       <Image className="chat-bg" src={bgImage} mode="aspectFill" />
@@ -642,10 +771,25 @@ export default function ChatPage() {
       <View className="chat-vignette-top" />
       <View className="chat-vignette-bottom" />
 
-      {/* Nav row */}
+      {/* Nav row — three round glass buttons on the left, leaving the
+          system capsule on the right untouched. */}
       <View className="chat-nav">
         <View className="chat-back" onClick={goBack} hoverClass="chat-back--hover">
           <Image className="chat-back-icon" src={iconBack} mode="aspectFit" />
+        </View>
+        <View
+          className="chat-back chat-nav-icon-btn"
+          onClick={goToDrafts}
+          hoverClass="chat-back--hover"
+        >
+          <Image className="chat-nav-icon" src={iconClock} mode="aspectFit" />
+        </View>
+        <View
+          className="chat-back chat-nav-icon-btn chat-nav-icon-btn-primary"
+          onClick={handleNewConversation}
+          hoverClass="chat-back--hover"
+        >
+          <Image className="chat-nav-icon" src={iconMessagePlus} mode="aspectFit" />
         </View>
       </View>
 
@@ -689,7 +833,10 @@ export default function ChatPage() {
                   <View className="avatar">
                     <Text className="avatar-emoji">🤍</Text>
                   </View>
-                  <View className="bubble bubble-ai">
+                  <View
+                    className="bubble bubble-ai"
+                    onLongPress={() => handleBubbleLongPress(msg)}
+                  >
                     <Text className="bubble-text bubble-text-ai">
                       {display}
                       {isStreaming && <Text className="typewriter-caret">▍</Text>}
@@ -705,6 +852,7 @@ export default function ChatPage() {
                   <View
                     className={`bubble bubble-voice ${playing ? 'is-playing' : ''}`}
                     onClick={() => toggleVoice(msg)}
+                    onLongPress={() => handleBubbleLongPress(msg)}
                     hoverClass="bubble-voice--hover"
                   >
                     <View className="voice-play-icon">
@@ -729,7 +877,10 @@ export default function ChatPage() {
             }
             return (
               <View key={msg.id} id={msg.id} className="msg-row msg-row-user">
-                <View className="bubble bubble-user">
+                <View
+                  className="bubble bubble-user"
+                  onLongPress={() => handleBubbleLongPress(msg)}
+                >
                   <Text className="bubble-text bubble-text-user">{msg.text}</Text>
                 </View>
               </View>

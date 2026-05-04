@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 
 import bgImage from '@/assets/bg-dawn.jpg';
 import iconBack from '@/assets/icons/chevron-left.svg';
+import { DraftMessage, setResume } from '@/utils/chatDrafts';
 
 import './index.less';
 
@@ -35,6 +36,10 @@ interface ReportRecord {
   id: string;
   createdAt: number;
   report: RawReport;
+  // Optional: present on reports generated after the "fork from report" feature
+  // landed. Older records may lack it — gracefully disable continue-chat in
+  // that case rather than blowing up.
+  conversation?: DraftMessage[];
 }
 
 // ─── Mock data (used as fallback when backend hasn't returned rich fields) ───
@@ -464,6 +469,21 @@ export default function ReportPage() {
 
   const copyTranslation = (text: string) => {
     Taro.setClipboardData({ data: text, success: () => Taro.showToast({ title: '已复制', icon: 'success' }) });
+  };
+
+  // Fork the conversation that produced this report into a brand-new chat
+  // session. The original report record stays in history untouched; if the
+  // user clicks "结束倾诉" again later, that produces a fresh report.
+  const continueConversation = () => {
+    const conv = record?.conversation;
+    if (!Array.isArray(conv) || conv.length === 0) {
+      Taro.showToast({ title: '原对话已不可用', icon: 'none' });
+      return;
+    }
+    setResume({ id: `c-fork-${Date.now()}`, messages: conv });
+    Taro.navigateTo({ url: '/pages/chat/index' }).catch(() => {
+      Taro.reLaunch({ url: '/pages/chat/index' });
+    });
   };
 
   // P0-8: render a shareable card to canvas → save to album. The user can
@@ -939,6 +959,19 @@ export default function ReportPage() {
               </View>
             </View>
           </View>
+
+          {/* Continue chatting — fork the original conversation into a
+              fresh chat. The current report stays in history untouched. */}
+          {Array.isArray(record?.conversation) && record!.conversation!.length > 0 && (
+            <View
+              className="continue-btn"
+              onClick={continueConversation}
+              hoverClass="continue-btn--hover"
+            >
+              <Text className="continue-btn-emoji">💬</Text>
+              <Text className="continue-btn-text">继续这段对话</Text>
+            </View>
+          )}
 
           {/* ── Generate poster ───────────────────────────── */}
           <View

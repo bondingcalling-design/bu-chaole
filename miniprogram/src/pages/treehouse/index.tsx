@@ -205,8 +205,18 @@ export default function TreehousePage() {
       {/* Bottom area — sits above the floating tab bar */}
       <View className="th-bottom">
         <View className="th-shred-row">
-          <Text className="th-shred-emoji">🔥</Text>
-          <Text className="th-shred-text">这里说的所有话，离开页面就消失</Text>
+          <View
+            className="th-breathe-pill"
+            onClick={() => Taro.navigateTo({ url: '/pages/breathe/index' })}
+            hoverClass="th-breathe-pill--hover"
+          >
+            <Text className="th-breathe-emoji">🌬️</Text>
+            <Text className="th-breathe-text">深呼吸 30 秒</Text>
+          </View>
+          <View className="th-shred-hint">
+            <Text className="th-shred-emoji">🔥</Text>
+            <Text className="th-shred-text">离开即焚</Text>
+          </View>
         </View>
 
         <View className="th-input-bar">

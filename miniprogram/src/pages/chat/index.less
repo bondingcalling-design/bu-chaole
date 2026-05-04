@@ -61,6 +61,24 @@
   padding-bottom: 8rpx;
   display: flex;
   align-items: center;
+  gap: 16rpx;
+}
+
+/* Sibling round buttons reuse .chat-back's glass style; these tweaks make
+   the trailing icons feel like a single trio with the back arrow. */
+.chat-nav-icon-btn {
+  /* base styling already comes from .chat-back */
+}
+
+.chat-nav-icon {
+  width: 36rpx;
+  height: 36rpx;
+}
+
+.chat-nav-icon-btn-primary {
+  background: rgba(122, 183, 255, 0.18);
+  border-color: rgba(160, 210, 255, 0.38);
+  box-shadow: 0 4rpx 20rpx rgba(122, 183, 255, 0.18);
 }
 
 .chat-back {

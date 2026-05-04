@@ -1,6 +1,7 @@
 import { PropsWithChildren } from 'react';
 import { useLaunch } from '@tarojs/taro';
 import Taro from '@tarojs/taro';
+import { archiveCurrentOnLaunch } from '@/utils/chatDrafts';
 import './app.less';
 
 function App({ children }: PropsWithChildren) {
@@ -21,6 +22,11 @@ function App({ children }: PropsWithChildren) {
         obeyMuteSwitch: false,
       });
     } catch (_) {}
+
+    // Cold start: any unfinished chat from a prior session moves into the
+    // drafts list so the user can resume it from history, while the live
+    // chat page opens fresh.
+    archiveCurrentOnLaunch();
   });
 
   return children;

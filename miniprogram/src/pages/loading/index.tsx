@@ -123,9 +123,13 @@ export default function LoadingPage() {
     } catch (_) {}
 
     // Clear the pending conversation so re-clicking "结束倾诉" from a stale
-    // chat won't blindly re-run with the same messages.
+    // chat won't blindly re-run with the same messages. Also drop the
+    // in-flight chat — once a report is generated the conversation is
+    // "complete" and lives under report-history, not under drafts.
     try {
       Taro.removeStorageSync('pending-report-conversation');
+      Taro.removeStorageSync('chat-current');
+      Taro.removeStorageSync('chat-draft');
     } catch (_) {}
 
     // Hold for minimum display time so the animation doesn't flash

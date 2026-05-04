@@ -13,7 +13,7 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  filter: brightness(0.42) saturate(0.95) hue-rotate(-8deg);
+  filter: brightness(0.55) saturate(0.95) hue-rotate(-8deg);
 }
 .th-vignette-main {
   position: absolute;
@@ -21,10 +21,10 @@
   pointer-events: none;
   background: linear-gradient(
     180deg,
-    rgba(20, 32, 22, 0.66) 0%,
-    rgba(14, 24, 18, 0.20) 30%,
+    rgba(20, 32, 22, 0.55) 0%,
+    rgba(14, 24, 18, 0.15) 30%,
     transparent 55%,
-    rgba(10, 18, 14, 0.78) 100%
+    rgba(10, 18, 14, 0.30) 100%
   );
 }
 .th-vignette-top {
@@ -32,14 +32,14 @@
   top: 0; left: 0; right: 0;
   height: 360rpx;
   pointer-events: none;
-  background: linear-gradient(to bottom, rgba(8, 16, 12, 0.78) 0%, transparent 100%);
+  background: linear-gradient(to bottom, rgba(8, 16, 12, 0.65) 0%, transparent 100%);
 }
 .th-vignette-bottom {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 480rpx;
+  height: 200rpx;
   pointer-events: none;
-  background: linear-gradient(to top, rgba(6, 14, 10, 0.86) 0%, transparent 100%);
+  background: linear-gradient(to top, rgba(6, 14, 10, 0.18) 0%, transparent 100%);
 }
 
 /* ── Header ──────────────────────────────────────────────── */
@@ -175,31 +175,61 @@
 }
 
 /* ── Bottom input ─────────────────────────────────────────
- * FloatingTabBar takes ~160rpx of viewport bottom (92rpx pill +
- * 60rpx safe-area padding + 8rpx top breathing). Anchor th-bottom at 152rpx
- * so its dark gradient meets the top of the tab-bar pill with no visible
- * gap, then let internal padding lift the input row clear of it. */
+ * Sits *above* the FloatingTabBar pill rather than under it, so the dark
+ * gradient never overlaps the tab bar. bottom: 180rpx clears the pill
+ * (which extends ~152rpx up from the viewport edge) with a small gap. */
 .th-bottom {
   position: fixed;
-  bottom: 152rpx;
+  bottom: 220rpx;
   left: 0;
   right: 0;
   z-index: 50;
   display: flex;
   flex-direction: column;
-  gap: 14rpx;
-  padding: 32rpx 32rpx 24rpx;
-  background: linear-gradient(to top, rgba(6, 14, 10, 0.94) 70%, rgba(6, 14, 10, 0));
-  backdrop-filter: blur(8rpx);
-  -webkit-backdrop-filter: blur(8rpx);
+  gap: 12rpx;
+  padding: 20rpx 32rpx 16rpx;
+  background: transparent;
 }
 
+/* Row above the input bar: action on the left ( 深呼吸 entry — the only
+ * way into /pages/breathe/index ), instinctive "burn-after-reading"
+ * disclaimer on the right. */
 .th-shred-row {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 0 8rpx;
+}
+
+.th-breathe-pill {
+  display: flex;
+  align-items: center;
   gap: 8rpx;
-  padding: 4rpx 16rpx;
+  padding: 10rpx 20rpx;
+  border-radius: 32rpx;
+  background: rgba(160, 210, 255, 0.14);
+  border: 1rpx solid rgba(160, 210, 255, 0.32);
+  backdrop-filter: blur(18rpx);
+  -webkit-backdrop-filter: blur(18rpx);
+  transition: transform 150ms ease, background 150ms ease;
+}
+.th-breathe-pill--hover {
+  transform: scale(0.94);
+  background: rgba(160, 210, 255, 0.22);
+}
+.th-breathe-emoji { font-size: 24rpx; }
+.th-breathe-text {
+  font-size: 22rpx;
+  color: rgba(220, 238, 255, 0.92);
+  letter-spacing: 1rpx;
+}
+
+.th-shred-hint {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 4rpx 12rpx;
 }
 .th-shred-emoji { font-size: 22rpx; }
 .th-shred-text {
@@ -234,7 +264,7 @@
   letter-spacing: 0.2rpx;
   padding: 10rpx 0;
 }
-.th-input-placeholder { color: rgba(255, 255, 255, 0.32); }
+.th-input-placeholder { color: rgba(255, 255, 255, 0.55); }
 
 .th-send-btn {
   width: 64rpx;
@@ -260,7 +290,7 @@
 }
 
 /* Reserve space at the bottom of the scroll list so the last bubble
- * isn't trapped under the input bar. */
+ * isn't trapped under the input bar (now sitting above the tab bar). */
 .th-list {
-  padding-bottom: 480rpx;
+  padding-bottom: 420rpx;
 }

@@ -1,3 +1,5 @@
+import Taro from '@tarojs/taro';
+
 // Tightened from the original word-list. The earlier version triggered on
 // single-char "\u8349 / \u64cd / \u6709\u75c5 / \u5783\u573e / \u6df7\u86cb / \u5e9f\u7269 / \u8111\u6b8b" which lit up on
 // completely benign sentences ("\u4eca\u5929\u53bb\u770b\u8349\u5730", "\u5783\u573e\u5206\u7c7b\u597d\u70e6", "\u6211\u54e5\u8111\u6b8b\u53c8\u60f9\u6211\u5988"),
